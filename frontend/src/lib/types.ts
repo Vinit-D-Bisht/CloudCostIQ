@@ -51,6 +51,7 @@ export interface Recommendation {
   estimated_monthly_saving: number;
   priority: "low" | "medium" | "high";
   action: string;
+  risk?: string;
 }
 
 export interface RecommendationResponse {

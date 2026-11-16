@@ -92,6 +92,9 @@ def sanitize_resource(resource: Any) -> dict[str, Any]:
     data["network_service"] = data.get("network_service") or ("egress" if data.get("kind") == "network" else None)
     data["environment"] = data.get("environment") or "non_production"
     data["region"] = data.get("region") or "us-east"
+    data["sku"] = str(data["sku"])[:48] if data.get("sku") else None
+    data["engine"] = str(data["engine"])[:48] if data.get("engine") else None
+    data["service_tier"] = str(data["service_tier"])[:48] if data.get("service_tier") else None
     return data
 
 
@@ -101,15 +104,25 @@ def _unit_cost(resource: dict[str, Any], provider: str, pricing_model: str, hour
     region_mul = REGION_MULTIPLIER.get(resource["region"], 1.0)
     kind = resource["kind"]
 
+    sku = str(resource.get("sku") or "").lower()
+    engine = str(resource.get("engine") or "").lower()
+    service_tier = str(resource.get("service_tier") or "")
+
     if kind in {"vm", "container", "cache"}:
         size_mul = resource["size"] if kind == "container" else 1.0
-        return base * TIER_WEIGHT.get(resource["tier"], 1.0) * hours * model_mul * region_mul * size_mul, False
+        sub_mul = 1.7 if (kind == "cache" and "ha" in service_tier.lower()) else 1.0
+        return base * TIER_WEIGHT.get(resource["tier"], 1.0) * hours * model_mul * region_mul * size_mul * sub_mul, False
     if kind == "database":
         ha_mul = 1.85 if resource.get("db_ha") == "multi_az" else 1.0
-        return base * TIER_WEIGHT.get(resource["tier"], 1.0) * hours * model_mul * region_mul * ha_mul, False
+        engine_mul = 1.25 if "aurora" in engine else 1.0
+        return base * TIER_WEIGHT.get(resource["tier"], 1.0) * hours * model_mul * region_mul * ha_mul * engine_mul, False
     if kind == "storage":
         gb_rate = {"gcp": 0.02, "azure": 0.024}.get(provider, 0.023)
         class_mul = 4.2 if resource.get("storage_class") == "block_ssd" else 1.0
+        if "ia" in sku or "nearline" in sku or "cool" in sku:
+            class_mul = 0.55
+        elif "io2" in sku or "extreme" in sku:
+            class_mul = 6.5
         model = model_mul if resource.get("storage_class") == "block_ssd" else 1.0
         return gb_rate * resource["size"] * class_mul * region_mul * model, False
     if kind == "network":
@@ -118,11 +131,23 @@ def _unit_cost(resource: dict[str, Any], provider: str, pricing_model: str, hour
         egress = {"gcp": 0.085, "azure": 0.087}.get(provider, 0.09)
         return egress * resource["size"] * region_mul, True
     if kind == "serverless":
-        return 0.2 * resource["size"] * region_mul * model_mul, True
+        mem_mul = 1.0
+        st = f"{sku} {service_tier}".lower()
+        if "128" in st:
+            mem_mul = 0.6
+        elif "1024" in st or "1gb" in st or "1 core" in st:
+            mem_mul = 2.0
+        elif "2048" in st or "2gb" in st:
+            mem_mul = 3.8
+        return 0.2 * resource["size"] * region_mul * model_mul * mem_mul, True
     if kind == "cdn":
         rate = {"gcp": 0.08, "azure": 0.087}.get(provider, 0.085)
-        return rate * resource["size"] * 1000 * region_mul, True
-    return 0.4 * resource["size"] * region_mul, True
+        st = f"{sku} {service_tier}".lower()
+        tier_mul = 1.25 if ("all" in st or "premium" in st) else 1.0
+        return rate * resource["size"] * 1000 * region_mul * tier_mul, True
+    st = f"{sku} {service_tier}".lower()
+    queue_mul = 1.5 if ("fifo" in st or "premium" in st) else 1.0
+    return 0.4 * resource["size"] * region_mul * queue_mul, True
 
 
 def _status(utilization: int, kind: str, tier: str | None) -> str:
@@ -186,9 +211,10 @@ def analyze(
         for item in estimates
         if item["status"] != "healthy"
     )
+    total_round = round(total, 2)
     return {
-        "total_monthly_cost": round(total, 2),
-        "projected_annual_cost": round(total * 12, 2),
+        "total_monthly_cost": total_round,
+        "projected_annual_cost": round(total_round * 12, 2),
         "estimated_savings": round(savings, 2),
         "utilization_score": round(weighted_util / weight) if weight else 0,
         "resource_estimates": estimates,

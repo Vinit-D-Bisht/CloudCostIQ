@@ -47,6 +47,9 @@ export interface ResourceConfig {
   db_ha?: DbHa;
   network_service?: NetworkService;
   environment?: Environment;
+  sku?: string;
+  engine?: string;
+  service_tier?: string;
 }
 
 export interface SimulationOptions {
@@ -178,6 +181,9 @@ export function sanitizeResource(resource: ResourceConfig): ResourceConfig {
     db_ha: resource.db_ha ?? (resource.kind === "database" ? "single_az" : undefined),
     network_service: resource.network_service ?? (resource.kind === "network" ? "egress" : undefined),
     environment: resource.environment ?? "non_production",
+    sku: resource.sku ? String(resource.sku).slice(0, 48) : undefined,
+    engine: resource.engine ? String(resource.engine).slice(0, 48) : undefined,
+    service_tier: resource.service_tier ? String(resource.service_tier).slice(0, 48) : undefined,
   };
 }
 
@@ -204,19 +210,27 @@ function computeUnitCost(
   const hours = Math.max(1, Math.min(730, Math.round(safeNumber(options.hoursPerMonth, 730))));
 
   if (clean.kind === "vm" || clean.kind === "container" || clean.kind === "cache") {
-    const unit = base * tierWeight(clean.tier) * hours * modelMul * regionMul * (clean.kind === "container" ? clean.size : 1);
+    let subMul = 1;
+    if (clean.kind === "cache" && clean.service_tier?.includes("HA")) subMul = 1.7;
+    const unit = base * tierWeight(clean.tier) * hours * modelMul * regionMul * (clean.kind === "container" ? clean.size : 1) * subMul;
     return { unit, scales: false };
   }
 
   if (clean.kind === "database") {
     const haMul = clean.db_ha === "multi_az" ? 1.85 : 1;
-    const unit = base * tierWeight(clean.tier) * hours * modelMul * regionMul * haMul;
+    const engineMul = clean.engine?.includes("aurora") ? 1.25 : 1.0;
+    const unit = base * tierWeight(clean.tier) * hours * modelMul * regionMul * haMul * engineMul;
     return { unit, scales: false };
   }
 
   if (clean.kind === "storage") {
     const gbRate = options.provider === "gcp" ? 0.02 : options.provider === "azure" ? 0.024 : 0.023;
-    const classMul = clean.storage_class === "block_ssd" ? 4.2 : 1;
+    let classMul = clean.storage_class === "block_ssd" ? 4.2 : 1;
+    if (clean.sku && (clean.sku.includes("ia") || clean.sku.includes("nearline") || clean.sku.includes("cool"))) {
+      classMul = 0.55;
+    } else if (clean.sku && (clean.sku.includes("io2") || clean.sku.includes("extreme"))) {
+      classMul = 6.5;
+    }
     const unit = gbRate * clean.size * classMul * regionMul * (clean.storage_class === "block_ssd" ? modelMul : 1);
     return { unit, scales: false };
   }
@@ -231,17 +245,23 @@ function computeUnitCost(
 
   if (clean.kind === "serverless") {
     // size = millions of requests / month baseline
-    return { unit: 0.2 * clean.size * regionMul * modelMul, scales: true };
+    let memMul = 1.0;
+    if (clean.sku?.includes("128") || clean.service_tier?.includes("128")) memMul = 0.6;
+    else if (clean.sku?.includes("1024") || clean.service_tier?.includes("1024") || clean.service_tier?.includes("1GB") || clean.service_tier?.includes("1 core")) memMul = 2.0;
+    else if (clean.sku?.includes("2048") || clean.service_tier?.includes("2048") || clean.service_tier?.includes("2GB")) memMul = 3.8;
+    return { unit: 0.2 * clean.size * regionMul * modelMul * memMul, scales: true };
   }
 
   if (clean.kind === "cdn") {
     // size = TB transferred
     const rate = options.provider === "gcp" ? 0.08 : options.provider === "azure" ? 0.087 : 0.085;
-    return { unit: rate * clean.size * 1000 * regionMul, scales: true };
+    const tierMul = (clean.sku?.includes("all") || clean.sku?.includes("premium") || clean.service_tier?.includes("Premium")) ? 1.25 : 1.0;
+    return { unit: rate * clean.size * 1000 * regionMul * tierMul, scales: true };
   }
 
   // queue: size = millions of messages
-  return { unit: 0.4 * clean.size * regionMul, scales: true };
+  const queueMul = (clean.sku?.includes("fifo") || clean.sku?.includes("premium") || clean.service_tier?.includes("Premium")) ? 1.5 : 1.0;
+  return { unit: 0.4 * clean.size * regionMul * queueMul, scales: true };
 }
 
 function statusFor(utilization: number, kind: ResourceKind, tier?: InstanceTier): ResourceStatus {
@@ -291,9 +311,10 @@ export function simulate(resources: ResourceConfig[], options: SimulationOptions
     roundedKind[kind] = Math.round(by_kind[kind] * 100) / 100;
   }
 
+  const roundedTotal = Math.round(total * 100) / 100;
   return {
-    total_monthly_cost: Math.round(total * 100) / 100,
-    projected_annual_cost: Math.round(total * 12 * 100) / 100,
+    total_monthly_cost: roundedTotal,
+    projected_annual_cost: Math.round(roundedTotal * 12 * 100) / 100,
     estimated_savings: Math.round(savings * 100) / 100,
     utilization_score: weight ? Math.round(weightedUtil / weight) : 0,
     resource_estimates: estimates,

@@ -38,6 +38,9 @@ class ResourceConfig(BaseModel):
     db_ha: DbHa | None = None
     network_service: NetworkService | None = None
     environment: Environment | None = "non_production"
+    sku: str | None = None
+    engine: str | None = None
+    service_tier: str | None = None
 
 
 class SimulationRequest(BaseModel):
@@ -101,6 +104,7 @@ class Recommendation(BaseModel):
     estimated_monthly_saving: float = Field(default=0, ge=0)
     priority: Literal["low", "medium", "high"] = "medium"
     action: str
+    risk: str | None = None
 
 
 class RecommendationResponse(BaseModel):
