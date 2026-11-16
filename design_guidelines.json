@@ -1,0 +1,83 @@
+{
+  "project_name": "CloudCost IQ",
+  "theme": "dark",
+  "architecture_style": "High Density Grid / Grid Borders",
+  "typography": {
+    "headings": "Cabinet Grotesk",
+    "body": "IBM Plex Sans",
+    "mono": "JetBrains Mono",
+    "guidelines": "Do NOT use Inter, Roboto, Open Sans. Headings must have tracking-tight. Overlines uppercase + tracking-[0.2em]."
+  },
+  "colors": {
+    "background": "#09090B",
+    "surface": "#18181B",
+    "border": "#27272A",
+    "primary": "#FACC15",
+    "primary_foreground": "#09090B",
+    "secondary": "#27272A",
+    "secondary_foreground": "#FAFAFA",
+    "muted": "#27272A",
+    "muted_foreground": "#A1A1AA",
+    "accent": "#FACC15",
+    "accent_foreground": "#09090B",
+    "destructive": "#EF4444",
+    "success": "#22C55E",
+    "warning": "#F59E0B"
+  },
+  "visual_enhancers": {
+    "surfaces": "Grid Borders for main dashboard areas, exposing the skeleton. Glassmorphism ONLY for floating modals or sticky headers.",
+    "effects": "Subtle noise texture overlay. Tracing Beam effect for the AI recommendation cards. No full-screen gradients."
+  },
+  "grids": {
+    "dashboard_mode": "High Density Grid. Tight gaps (gap-4). Every pixel utilized.",
+    "canvas_mode": "Blueprint dot grid background. Absolute positioning for nodes."
+  },
+  "layouts": {
+    "app_shell": "3-column layout: Left Sidebar (Components), Center Canvas (Infrastructure Builder), Right Panel (Inspector/Costs/AI)."
+  },
+  "motion": {
+    "micro_interactions": "Hover states must have higher contrast. Buttons slide up slightly (-translate-y-0.5) with shadow-md.",
+    "loading": "Retro-terminal ASCII loaders or simple monospace text counters.",
+    "transitions": "Use specific properties (transition-transform transition-colors), avoid 'transition-all'."
+  },
+  "accessibility": {
+    "contrast": "Ensure 4.5:1 ratio for text. Never rely on color alone for states.",
+    "focus": "Focus rings must use primary color (focus:ring-yellow-400 focus:ring-offset-zinc-950)."
+  },
+  "icons": {
+    "library": "@phosphor-icons/react",
+    "style": "duotone"
+  },
+  "components": {
+    "cards": "Flat background, 1px border, no shadow by default.",
+    "buttons": "Sharp edges (rounded-none or rounded-sm). Primary button uses solid Warning Yellow.",
+    "tabs": "Shadcn tabs, customized to have transparent background with bottom border for active state.",
+    "charts": "Recharts. Area charts for cost simulation over time with yellow/green gradients."
+  },
+  "dependencies_to_install": [
+    "@phosphor-icons/react",
+    "@xyflow/react",
+    "recharts",
+    "sonner"
+  ],
+  "instructions_to_main_agent": [
+    "Install `@phosphor-icons/react`, `recharts`, `@xyflow/react`, and `sonner` via npm/yarn.",
+    "Build a 3-column dashboard layout mimicking a professional IDE / Cloud Console.",
+    "Left column: Toolbox for dragging and dropping infrastructure resources (VMs, DBs, Network, Storage).",
+    "Center column: Interactive infrastructure canvas using `@xyflow/react` (or a custom node-based UI) over a dotted blueprint grid.",
+    "Right column: Accordion or Tabs containing 1) Resource Properties, 2) Cost Analysis & charts, 3) AI Recommendations, 4) Terraform Code Output.",
+    "Ensure all state interacts: adding a resource updates the cost estimate and the Terraform code live.",
+    "Implement the UI entirely without watermarks. Do NOT include any 'Powered by AI' or vendor text.",
+    "Implement Sonner for toast notifications (e.g., when Terraform config is generated or validated).",
+    "Add `data-testid` attributes to all interactive elements.",
+    "Generate a very detailed, professional `README.md` at the root of the project. It should document the architecture, how to run it, the features (drag-and-drop builder, cost estimation, AI insights, Terraform export), and should be written to attain '200 marks' for an academic or high-end professional submission. Also DO NOT put any watermark anywhere."
+  ],
+  "UNIVERSAL_GUIDELINES_FOR_MAIN_AGENT": [
+    "Avoid generic 'AI slop' aesthetics. Do NOT use Inter. Do NOT center align everything.",
+    "Do not use dark colors as gradients.",
+    "Create depth with z-index hierarchy and crisp borders.",
+    "DO NOT apply `transition: all` anywhere. Use explicit transitions.",
+    "NO complete transparent background in overlays/dropdowns.",
+    "Ensure all interactive elements have data-testid."
+  ]
+}
