@@ -55,7 +55,7 @@ class TestApiEndpoints(unittest.TestCase):
         resp = self.client.post("/api/recommendations", json=payload)
         self.assertEqual(resp.status_code, 200)
         data = resp.json()
-        self.assertIn(data["provider"], ["ollama", "free_api", "deterministic"])
+        self.assertIn(data["provider"], ["gemini", "deterministic"])
         self.assertGreaterEqual(len(data["recommendations"]), 1)
 
     def test_terraform_generate_and_validate(self):

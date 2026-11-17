@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
@@ -7,14 +7,12 @@ import {
   Boxes,
   Bot,
   Check,
-  ChevronRight,
   Clipboard,
   Cloud,
   Code2,
   Container,
   Database,
   Download,
-  Filter,
   Gauge,
   HardDrive,
   Info,
@@ -27,7 +25,7 @@ import {
   RefreshCw,
   Save,
   Server,
-  ShieldAlert,
+  Send,
   ShieldCheck,
   Sliders,
   Sparkles,
@@ -75,8 +73,8 @@ import {
 } from "@/lib/sim";
 import { generateTerraform, validateTerraform } from "@/lib/terraform";
 import type {
+  AdvisorChatResponse,
   AuthResponse,
-  Recommendation,
   RecommendationRequest,
   RecommendationResponse,
   TerraformResponse,
@@ -87,9 +85,10 @@ import type {
 import { setAuthMode } from "@/lib/workspace-store";
 
 type Panel = "analysis" | "insights" | "scenarios" | "terraform";
+type ChatMessage = { role: "user" | "assistant"; content: string };
 
 const KIND_COLOR: Record<ResourceKind, string> = {
-  vm: "#f5c518",
+  vm: "#f59e0b",
   storage: "#4db8ff",
   network: "#3dd68c",
   database: "#f472b6",
@@ -139,6 +138,13 @@ export default function Home() {
   const [localValidation, setLocalValidation] = useState<TerraformValidation | null>(null);
   const [selectedCategory, setSelectedCategory] = useState<string>("all");
   const [tfProvider, setTfProvider] = useState<CloudProvider>("aws");
+  const [chatOpen, setChatOpen] = useState(false);
+  const [chatInput, setChatInput] = useState("");
+  const [chatPending, setChatPending] = useState(false);
+  const [chatProvider, setChatProvider] = useState<"groq" | "deterministic" | null>(null);
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([
+    { role: "assistant", content: "Hi! Ask me about this setup, its estimated costs, or ways to optimize it." },
+  ]);
 
   const meQuery = useQuery({
     queryKey: ["auth-me"],
@@ -238,13 +244,11 @@ export default function Home() {
   const riskyResources = simulation.resource_estimates.filter((item) => item.status !== "healthy").length;
   const aiData = recommendationMutation.data;
   const providerLabel =
-    aiData?.provider === "free_api"
-      ? "AI Cloud Backup"
-      : aiData?.provider === "ollama"
-        ? "Local Ollama AI"
-        : aiData
-          ? "Deterministic Advisor"
-          : "Deterministic Rule Engine (Guaranteed)";
+    aiData?.provider === "gemini"
+      ? "Gemini AI"
+      : aiData
+        ? "Deterministic Advisor"
+        : "Deterministic Rule Engine (Guaranteed)";
 
   const pieData = RESOURCE_KINDS
     .map((kind) => ({
@@ -268,6 +272,33 @@ export default function Home() {
       region,
       workload,
     });
+  }
+
+  async function sendChatMessage(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const content = chatInput.trim();
+    if (!content || chatPending) return;
+    const nextMessages = [...chatMessages, { role: "user" as const, content }];
+    setChatMessages(nextMessages);
+    setChatInput("");
+    setChatPending(true);
+    try {
+      const response = await apiPost<AdvisorChatResponse>("/recommendations/chat", {
+        messages: nextMessages.slice(-20),
+        resources,
+        simulation,
+        provider,
+        pricing_model: pricingModel,
+        region,
+        workload,
+      });
+      setChatProvider(response.provider);
+      setChatMessages((current) => [...current, { role: "assistant", content: response.reply }]);
+    } catch {
+      setChatMessages((current) => [...current, { role: "assistant", content: "I couldn't reach the advisor right now. Please try again." }]);
+    } finally {
+      setChatPending(false);
+    }
   }
 
   function addResource(kind: ResourceKind) {
@@ -387,6 +418,8 @@ export default function Home() {
   }
 
   const insights = aiData?.recommendations ?? localRules;
+  const potentialSavings = insights.reduce((total, item) => total + Math.max(0, item.estimated_monthly_saving), 0);
+  const priorityCount = insights.filter((item) => item.priority === "high").length;
 
   // Filter toolbox by category
   const filteredCatalog = catalogFor(provider).filter((item) => {
@@ -398,16 +431,16 @@ export default function Home() {
   });
 
   return (
-    <div className="min-h-svh bg-[#07080b] text-[#f4f7fb]" data-testid="cloudcostiq-app-shell">
+    <div className="min-h-svh bg-[#080c14] text-[#f1f5f9]" data-testid="cloudcostiq-app-shell">
       {/* Top Banner / Engineering Control Room Header */}
       <header
-        className="sticky top-0 z-30 border-b border-[#243041] bg-[#07080b]/95 backdrop-blur-xl"
+        className="sticky top-0 z-30 border-b border-[#1e293b] bg-[#080c14]/95 backdrop-blur-xl"
         data-testid="workspace-header"
       >
         <div className="flex min-h-20 flex-wrap items-center justify-between gap-4 px-5 py-3 lg:px-8">
           <div className="flex items-center gap-4">
             <div
-              className="grid size-12 place-items-center border border-[#f5c518]/60 bg-[#f5c518] text-[#0a0b0f] shadow-[0_0_30px_rgba(245,197,24,0.3)] transition-transform hover:scale-105"
+              className="grid size-12 place-items-center border border-[#f59e0b]/60 bg-[#f59e0b] text-[#090d16] shadow-[0_0_30px_rgba(245,197,24,0.3)] transition-transform hover:scale-105"
               data-testid="brand-mark"
             >
               <Zap className="size-6" strokeWidth={2.5} />
@@ -415,13 +448,13 @@ export default function Home() {
             <div>
               <div className="flex items-center gap-2.5">
                 <p className="font-heading text-2xl font-bold tracking-tight text-white" data-testid="brand-name">
-                  CLOUDCOST <span className="text-[#f5c518]">IQ</span>
+                  CLOUDCOST <span className="text-[#f59e0b]">IQ</span>
                 </p>
                 <span className="hidden rounded-xs border border-[#3dd68c]/40 bg-[#3dd68c]/10 px-2 py-0.5 font-mono text-[10px] uppercase tracking-wider text-[#3dd68c] sm:inline-block">
                   Sim Only · 0 Mutations
                 </span>
               </div>
-              <p className="mt-0.5 font-mono text-xs uppercase tracking-[0.2em] text-[#8fa3b8]">
+              <p className="mt-0.5 font-mono text-xs uppercase tracking-[0.2em] text-[#94a3b8]">
                 Multi-Cloud Cost Simulation Lab
               </p>
             </div>
@@ -429,7 +462,7 @@ export default function Home() {
 
           <div className="flex flex-wrap items-center gap-2.5" data-testid="header-controls">
             {/* Cloud Provider Switcher */}
-            <div className="flex items-center rounded-sm border border-[#243041] bg-[#0a0e14] p-1">
+            <div className="flex items-center rounded-sm border border-[#1e293b] bg-[#090d16] p-1">
               {PROVIDERS.map((item) => (
                 <button
                   key={item}
@@ -441,8 +474,8 @@ export default function Home() {
                   }}
                   className={`px-3 py-1.5 font-mono text-xs font-semibold uppercase tracking-wider transition-colors ${
                     provider === item
-                      ? "bg-[#f5c518] text-[#0a0b0f] shadow-sm"
-                      : "text-[#8fa3b8] hover:text-white"
+                      ? "bg-[#f59e0b] text-[#090d16] shadow-sm"
+                      : "text-[#94a3b8] hover:text-white"
                   }`}
                   data-testid={`provider-btn-${item}`}
                 >
@@ -537,7 +570,7 @@ export default function Home() {
             <button
               type="button"
               onClick={() => endSession("/login")}
-              className="btn-ghost inline-flex items-center gap-2 cursor-pointer text-[#8fa3b8] hover:text-red-400"
+              className="btn-ghost inline-flex items-center gap-2 cursor-pointer text-[#94a3b8] hover:text-red-400"
               data-testid="sign-out-button"
               title="Sign out of CloudCost IQ"
             >
@@ -550,9 +583,9 @@ export default function Home() {
 
       <main className="mx-auto max-w-[1920px] p-5 lg:p-7" data-testid="workspace-main">
         {/* Blueprints and Workspace Naming Bar */}
-        <div className="mb-5 flex flex-wrap items-center justify-between gap-3 border border-[#243041] bg-[#0c1017] p-3 rise-in" data-testid="blueprint-row">
+        <div className="mb-5 flex flex-wrap items-center justify-between gap-3 border border-[#1e293b] bg-[#0e1422] p-3 rise-in" data-testid="blueprint-row">
           <div className="flex flex-wrap items-center gap-2.5">
-            <span className="section-kicker flex items-center gap-1.5 px-2 text-[#f5c518]">
+            <span className="section-kicker flex items-center gap-1.5 px-2 text-[#f59e0b]">
               <Layers className="size-3.5" /> Blueprints:
             </span>
             {BLUEPRINTS.map((item) => (
@@ -560,30 +593,30 @@ export default function Home() {
                 key={item.id}
                 type="button"
                 onClick={() => applyBlueprint(item.id)}
-                className="group relative border border-[#243041] bg-[#10141c] px-3.5 py-2 font-mono text-xs uppercase tracking-wider text-[#c4d0dc] transition-all hover:border-[#f5c518]/60 hover:text-[#f5c518] cursor-pointer"
+                className="group relative border border-[#1e293b] bg-[#162032] px-3.5 py-2 font-mono text-xs uppercase tracking-wider text-[#cbd5e1] transition-all hover:border-[#f59e0b]/60 hover:text-[#f59e0b] cursor-pointer"
                 data-testid={`blueprint-${item.id}`}
                 title={item.description}
               >
-                <span className="mr-1.5 text-[10px] text-[#5a6b7d] group-hover:text-[#f5c518]">{item.category} /</span>
+                <span className="mr-1.5 text-[10px] text-[#64748b] group-hover:text-[#f59e0b]">{item.category} /</span>
                 {item.name}
               </button>
             ))}
           </div>
 
           <div className="flex items-center gap-3">
-            <label className="flex items-center gap-2 font-mono text-xs text-[#8fa3b8]">
+            <label className="flex items-center gap-2 font-mono text-xs text-[#94a3b8]">
               Workspace:
               <Input
                 value={workspaceName}
                 onChange={(e) => setWorkspaceName(e.target.value)}
-                className="h-9 w-52 rounded-sm border-[#243041] bg-[#0a0e14] font-mono text-sm text-[#f5c518]"
+                className="h-9 w-52 rounded-sm border-[#1e293b] bg-[#090d16] font-mono text-sm text-[#f59e0b]"
                 data-testid="workspace-name-input"
               />
             </label>
             <button
               type="button"
               onClick={clearAllResources}
-              className="border border-[#243041] bg-[#10141c] px-3 py-2 font-mono text-xs text-[#8fa3b8] hover:border-red-500/50 hover:text-red-400 cursor-pointer"
+              className="border border-[#1e293b] bg-[#162032] px-3 py-2 font-mono text-xs text-[#94a3b8] hover:border-red-500/50 hover:text-red-400 cursor-pointer"
               title="Clear all canvas nodes"
             >
               Clear
@@ -593,7 +626,7 @@ export default function Home() {
 
         {/* Top Control Room Metric Strip */}
         <div
-          className="mb-5 grid grid-cols-1 gap-px border border-[#243041] bg-[#243041] sm:grid-cols-2 xl:grid-cols-4"
+          className="mb-5 grid grid-cols-1 gap-px border border-[#1e293b] bg-[#1e293b] sm:grid-cols-2 xl:grid-cols-4"
           data-testid="metric-strip"
         >
           <Metric
@@ -635,18 +668,18 @@ export default function Home() {
         >
           {/* LEFT: Toolbox & Scenario Controls */}
           <aside className="panel flex flex-col" data-testid="resource-toolbox">
-            <div className="border-b border-[#243041] p-4">
+            <div className="border-b border-[#1e293b] p-4">
               <div className="flex items-center justify-between">
                 <p className="section-kicker">01 / Service Toolbox</p>
-                <span className="font-mono text-xs uppercase text-[#f5c518]">{provider.toUpperCase()}</span>
+                <span className="font-mono text-xs uppercase text-[#f59e0b]">{provider.toUpperCase()}</span>
               </div>
               <h2 className="mt-1 font-heading text-xl font-bold tracking-tight text-white">Add Cloud Services</h2>
-              <p className="mt-1 text-xs leading-relaxed text-[#8fa3b8]">
+              <p className="mt-1 text-xs leading-relaxed text-[#94a3b8]">
                 Select provider-branded catalog resources. Simulation only.
               </p>
 
               {/* Category Filter */}
-              <div className="mt-3 flex gap-1 border-t border-[#243041]/60 pt-3">
+              <div className="mt-3 flex gap-1 border-t border-[#1e293b]/60 pt-3">
                 {["all", "compute", "storage", "network"].map((cat) => (
                   <button
                     key={cat}
@@ -654,8 +687,8 @@ export default function Home() {
                     onClick={() => setSelectedCategory(cat)}
                     className={`flex-1 py-1 text-center font-mono text-[10px] uppercase tracking-wider transition-colors cursor-pointer ${
                       selectedCategory === cat
-                        ? "border border-[#f5c518]/50 bg-[#f5c518]/10 text-[#f5c518]"
-                        : "border border-[#243041] text-[#8fa3b8] hover:text-white"
+                        ? "border border-[#f59e0b]/50 bg-[#f59e0b]/10 text-[#f59e0b]"
+                        : "border border-[#1e293b] text-[#94a3b8] hover:text-white"
                     }`}
                   >
                     {cat}
@@ -673,35 +706,35 @@ export default function Home() {
                     key={item.kind}
                     type="button"
                     onClick={() => addResource(item.kind)}
-                    className="group flex w-full items-center gap-3.5 border border-[#243041] bg-[#0a0e14]/90 p-3 text-left transition-all hover:border-[#f5c518]/50 hover:bg-[#10141c] cursor-pointer"
+                    className="group flex w-full items-center gap-3.5 border border-[#1e293b] bg-[#090d16]/90 p-3 text-left transition-all hover:border-[#f59e0b]/50 hover:bg-[#162032] cursor-pointer"
                     data-testid={`add-${item.kind}-resource-button`}
                   >
                     <span
-                      className="grid size-10 shrink-0 place-items-center border border-[#243041] bg-[#10141c]"
+                      className="grid size-10 shrink-0 place-items-center border border-[#1e293b] bg-[#162032]"
                       style={{ color: item.color }}
                     >
                       <Icon className="size-5" />
                     </span>
                     <span className="min-w-0 flex-1">
-                      <span className="block text-sm font-semibold text-zinc-100 group-hover:text-[#f5c518]">
+                      <span className="block text-sm font-semibold text-zinc-100 group-hover:text-[#f59e0b]">
                         {item.label}
                       </span>
-                      <span className="mt-0.5 block truncate text-xs text-[#8fa3b8]">{item.description}</span>
+                      <span className="mt-0.5 block truncate text-xs text-[#94a3b8]">{item.description}</span>
                     </span>
-                    <Plus className="size-4 text-[#5a6b7d] transition-transform group-hover:rotate-90 group-hover:text-[#f5c518]" />
+                    <Plus className="size-4 text-[#64748b] transition-transform group-hover:rotate-90 group-hover:text-[#f59e0b]" />
                   </button>
                 );
               })}
             </div>
 
             {/* Workload Simulation Sliders */}
-            <div className="mt-auto space-y-4 border-t border-[#243041] p-4 bg-[#0a0e14]/60" data-testid="scenario-controls">
+            <div className="mt-auto space-y-4 border-t border-[#1e293b] p-4 bg-[#090d16]/60" data-testid="scenario-controls">
               <div>
                 <div className="mb-1.5 flex items-center justify-between">
                   <span className="section-kicker flex items-center gap-1.5">
-                    <Sliders className="size-3 text-[#f5c518]" /> Workload Intensity
+                    <Sliders className="size-3 text-[#f59e0b]" /> Workload Intensity
                   </span>
-                  <span className="font-mono text-sm font-bold text-[#f5c518]">{workload}%</span>
+                  <span className="font-mono text-sm font-bold text-[#f59e0b]">{workload}%</span>
                 </div>
                 <input
                   aria-label="Workload intensity"
@@ -710,10 +743,10 @@ export default function Home() {
                   max={100}
                   value={workload}
                   onChange={(e) => setWorkload(Number(e.target.value))}
-                  className="w-full accent-[#f5c518] cursor-pointer"
+                  className="w-full accent-[#f59e0b] cursor-pointer"
                   data-testid="workload-slider"
                 />
-                <div className="mt-1 flex justify-between font-mono text-[10px] text-[#5a6b7d]">
+                <div className="mt-1 flex justify-between font-mono text-[10px] text-[#64748b]">
                   <span>0% Idle</span>
                   <span>50% Steady</span>
                   <span>100% Peak</span>
@@ -723,7 +756,7 @@ export default function Home() {
               <div>
                 <div className="mb-1.5 flex items-center justify-between">
                   <span className="section-kicker">Operating Hours / Mo</span>
-                  <span className="font-mono text-sm font-bold text-[#f5c518]">{hoursPerMonth}h</span>
+                  <span className="font-mono text-sm font-bold text-[#f59e0b]">{hoursPerMonth}h</span>
                 </div>
                 <input
                   aria-label="Monthly running hours"
@@ -732,21 +765,21 @@ export default function Home() {
                   max={730}
                   value={hoursPerMonth}
                   onChange={(e) => setHoursPerMonth(Number(e.target.value))}
-                  className="w-full accent-[#f5c518] cursor-pointer"
+                  className="w-full accent-[#f59e0b] cursor-pointer"
                   data-testid="hours-slider"
                 />
                 <div className="mt-1.5 flex gap-1.5">
                   <button
                     type="button"
                     onClick={() => setHoursPerMonth(160)}
-                    className="flex-1 border border-[#243041] py-1 font-mono text-[10px] text-[#8fa3b8] hover:text-white cursor-pointer"
+                    className="flex-1 border border-[#1e293b] py-1 font-mono text-[10px] text-[#94a3b8] hover:text-white cursor-pointer"
                   >
                     Office (160h)
                   </button>
                   <button
                     type="button"
                     onClick={() => setHoursPerMonth(730)}
-                    className="flex-1 border border-[#243041] py-1 font-mono text-[10px] text-[#8fa3b8] hover:text-white cursor-pointer"
+                    className="flex-1 border border-[#1e293b] py-1 font-mono text-[10px] text-[#94a3b8] hover:text-white cursor-pointer"
                   >
                     24/7 (730h)
                   </button>
@@ -755,22 +788,22 @@ export default function Home() {
 
               {/* Saved Cloud Workspaces List */}
               {(workspacesQuery.data?.length ?? 0) > 0 && (
-                <div data-testid="cloud-workspace-list" className="border-t border-[#243041]/60 pt-3">
+                <div data-testid="cloud-workspace-list" className="border-t border-[#1e293b]/60 pt-3">
                   <p className="section-kicker mb-2">Saved Workspaces</p>
                   <div className="max-h-32 space-y-1.5 overflow-auto">
                     {workspacesQuery.data?.map((item) => (
-                      <div key={item.id} className="flex items-center justify-between gap-2 border border-[#243041] bg-[#0c1017] px-2.5 py-1.5">
+                      <div key={item.id} className="flex items-center justify-between gap-2 border border-[#1e293b] bg-[#0e1422] px-2.5 py-1.5">
                         <button
                           type="button"
                           onClick={() => loadCloudWorkspace(item.id)}
-                          className="min-w-0 flex-1 truncate text-left font-mono text-xs text-[#d7e0ea] hover:text-[#f5c518] cursor-pointer"
+                          className="min-w-0 flex-1 truncate text-left font-mono text-xs text-[#cbd5e1] hover:text-[#f59e0b] cursor-pointer"
                         >
                           {item.name}
                         </button>
                         <button
                           type="button"
                           onClick={() => deleteCloudWorkspace(item.id)}
-                          className="text-[#5a6b7d] hover:text-red-400 cursor-pointer"
+                          className="text-[#64748b] hover:text-red-400 cursor-pointer"
                           title="Delete workspace"
                         >
                           <Trash2 className="size-3.5" />
@@ -785,16 +818,16 @@ export default function Home() {
 
           {/* CENTER: Canvas / Infrastructure Topology */}
           <section
-            className="blueprint-grid relative flex min-h-[640px] flex-col border border-[#243041] bg-[#07080b]"
+            className="blueprint-grid relative flex min-h-[640px] flex-col border border-[#1e293b] bg-[#080c14]"
             data-testid="infrastructure-canvas"
           >
             {/* Canvas Header */}
-            <div className="relative z-10 flex items-center justify-between border-b border-[#243041] bg-[#0c1017]/95 px-5 py-4 backdrop-blur">
+            <div className="relative z-10 flex items-center justify-between border-b border-[#1e293b] bg-[#0e1422]/95 px-5 py-4 backdrop-blur">
               <div>
                 <p className="section-kicker">02 / Infrastructure Topology</p>
                 <p className="mt-0.5 font-heading text-lg font-bold text-white">
                   Simulation Canvas{" "}
-                  <span className="ml-2 rounded-xs border border-[#243041] bg-[#10141c] px-2 py-0.5 font-mono text-xs font-normal text-[#f5c518]">
+                  <span className="ml-2 rounded-xs border border-[#1e293b] bg-[#162032] px-2 py-0.5 font-mono text-xs font-normal text-[#f59e0b]">
                     {resources.length} active node{resources.length === 1 ? "" : "s"}
                   </span>
                 </p>
@@ -821,7 +854,7 @@ export default function Home() {
                     ? "text-[#3dd68c] border-[#3dd68c]/30 bg-[#3dd68c]/10"
                     : estimate?.status === "idle"
                       ? "text-red-400 border-red-400/30 bg-red-400/10"
-                      : "text-[#f5c518] border-[#f5c518]/30 bg-[#f5c518]/10";
+                      : "text-[#f59e0b] border-[#f59e0b]/30 bg-[#f59e0b]/10";
 
                 return (
                   <div
@@ -832,18 +865,18 @@ export default function Home() {
                     onKeyDown={(event) => {
                       if (event.key === "Enter" || event.key === " ") setSelectedId(resource.id);
                     }}
-                    className={`resource-node group relative z-10 w-[240px] cursor-pointer border bg-[#0c1017] transition-all ${
+                    className={`resource-node group relative z-10 w-[240px] cursor-pointer border bg-[#0e1422] transition-all ${
                       isSelected
-                        ? "is-selected border-[#f5c518] shadow-[0_0_24px_rgba(245,197,24,0.18)]"
-                        : "border-[#2c3b50] hover:border-[#5a6b7d]"
+                        ? "is-selected border-[#f59e0b] shadow-[0_0_24px_rgba(245,197,24,0.18)]"
+                        : "border-[#1e293b] hover:border-[#64748b]"
                     }`}
                     data-testid={`resource-node-${resource.id}`}
                   >
                     {/* Node Header */}
-                    <div className="flex items-center justify-between gap-2 border-b border-[#243041] px-3.5 py-2.5 bg-[#10141c]/80">
+                    <div className="flex items-center justify-between gap-2 border-b border-[#1e293b] px-3.5 py-2.5 bg-[#162032]/80">
                       <span className="flex min-w-0 items-center gap-2">
                         <span
-                          className="grid size-7 place-items-center bg-[#07080b]"
+                          className="grid size-7 place-items-center bg-[#080c14]"
                           style={{ color: KIND_COLOR[resource.kind] }}
                         >
                           <Icon className="size-4" />
@@ -860,7 +893,7 @@ export default function Home() {
                           event.stopPropagation();
                           removeResource(resource.id);
                         }}
-                        className="grid size-7 place-items-center text-[#8fa3b8] hover:bg-red-500/15 hover:text-red-400 cursor-pointer"
+                        className="grid size-7 place-items-center text-[#94a3b8] hover:bg-red-500/15 hover:text-red-400 cursor-pointer"
                         data-testid={`delete-resource-${resource.id}`}
                       >
                         <Trash2 className="size-3.5" />
@@ -870,7 +903,7 @@ export default function Home() {
                     {/* Node Body */}
                     <div className="space-y-2.5 p-3.5">
                       <div className="flex items-center justify-between">
-                        <span className="font-mono text-[11px] uppercase tracking-wider text-[#8fa3b8]">
+                        <span className="font-mono text-[11px] uppercase tracking-wider text-[#94a3b8]">
                           {kindLabel(resource.kind, provider)}
                         </span>
                         <span className={`rounded-xs border px-1.5 py-0.5 font-mono text-[10px] uppercase ${statusColor}`}>
@@ -879,26 +912,26 @@ export default function Home() {
                       </div>
 
                       {/* Hardware / SKU subtitle */}
-                      <p className="truncate font-mono text-xs text-[#c4d0dc]">
+                      <p className="truncate font-mono text-xs text-[#cbd5e1]">
                         {resource.sku || resource.tier || (resource.kind === "storage" ? resource.storage_class : `${resource.size} units`)}
                       </p>
 
                       {/* Utilization Meter */}
                       <div className="space-y-1">
-                        <div className="flex justify-between font-mono text-[10px] text-[#8fa3b8]">
+                        <div className="flex justify-between font-mono text-[10px] text-[#94a3b8]">
                           <span>Utilization</span>
-                          <span className={estimate?.status === "healthy" ? "text-[#3dd68c]" : "text-[#f5c518]"}>
+                          <span className={estimate?.status === "healthy" ? "text-[#3dd68c]" : "text-[#f59e0b]"}>
                             {estimate?.utilization ?? 0}%
                           </span>
                         </div>
-                        <div className="h-1.5 w-full bg-[#1a2230]">
+                        <div className="h-1.5 w-full bg-[#162032]">
                           <div
                             className={`h-full transition-all ${
                               estimate?.status === "healthy"
                                 ? "bg-[#3dd68c]"
                                 : estimate?.status === "idle"
                                   ? "bg-red-400"
-                                  : "bg-[#f5c518]"
+                                  : "bg-[#f59e0b]"
                             }`}
                             style={{ width: `${Math.min(100, estimate?.utilization ?? 0)}%` }}
                           />
@@ -906,11 +939,11 @@ export default function Home() {
                       </div>
 
                       {/* Cost Display */}
-                      <div className="flex items-baseline justify-between border-t border-[#243041]/60 pt-2">
-                        <span className="font-mono text-[10px] text-[#5a6b7d]">NODE 0{index + 1}</span>
+                      <div className="flex items-baseline justify-between border-t border-[#1e293b]/60 pt-2">
+                        <span className="font-mono text-[10px] text-[#64748b]">NODE 0{index + 1}</span>
                         <p className="font-heading text-lg font-bold text-white">
                           {currency(estimate?.monthly_cost ?? 0)}
-                          <span className="ml-1 text-xs font-normal text-[#8fa3b8]">/mo</span>
+                          <span className="ml-1 text-xs font-normal text-[#94a3b8]">/mo</span>
                         </p>
                       </div>
                     </div>
@@ -920,10 +953,10 @@ export default function Home() {
 
               {resources.length === 0 && (
                 <div className="absolute inset-0 grid place-items-center">
-                  <div className="max-w-md border border-dashed border-[#2c3b50] p-8 text-center bg-[#0c1017]/80">
-                    <Boxes className="mx-auto size-14 text-[#2c3b50]" />
+                  <div className="max-w-md border border-dashed border-[#1e293b] p-8 text-center bg-[#0e1422]/80">
+                    <Boxes className="mx-auto size-14 text-[#1e293b]" />
                     <p className="mt-4 font-heading text-xl font-bold text-zinc-100">Topology Canvas is Empty</p>
-                    <p className="mt-2 text-sm leading-relaxed text-[#8fa3b8]">
+                    <p className="mt-2 text-sm leading-relaxed text-[#94a3b8]">
                       Add components from the left toolbox or load one of the pre-configured architecture blueprints above.
                     </p>
                     <div className="mt-5 flex justify-center gap-3">
@@ -943,20 +976,20 @@ export default function Home() {
 
           {/* RIGHT: Inspector & Control Room Tabs */}
           <aside className="panel flex flex-col" data-testid="inspector-panel">
-            <div className="border-b border-[#243041] p-4">
+            <div className="border-b border-[#1e293b] p-4">
               <p className="section-kicker">03 / Resource Inspector</p>
               <h2 className="mt-1 font-heading text-xl font-bold tracking-tight text-white">Node Specifications</h2>
             </div>
 
             {/* Selected Resource Details */}
-            <div className="border-b border-[#243041] p-4" data-testid="resource-properties">
+            <div className="border-b border-[#1e293b] p-4" data-testid="resource-properties">
               {selected ? (
                 <div className="space-y-4">
-                  <div className="flex items-start justify-between gap-3 border-b border-[#243041]/60 pb-3">
+                  <div className="flex items-start justify-between gap-3 border-b border-[#1e293b]/60 pb-3">
                     <div>
-                      <p className="section-kicker text-[#f5c518]">Active Component</p>
+                      <p className="section-kicker text-[#f59e0b]">Active Component</p>
                       <p className="mt-0.5 text-base font-bold text-white">{kindLabel(selected.kind, provider)}</p>
-                      <span className="font-mono text-xs text-[#8fa3b8]">{selected.id}</span>
+                      <span className="font-mono text-xs text-[#94a3b8]">{selected.id}</span>
                     </div>
                     <button
                       type="button"
@@ -976,7 +1009,7 @@ export default function Home() {
                       id="resource-name-input"
                       value={selected.name}
                       onChange={(e) => updateSelected({ name: e.target.value })}
-                      className="mt-1.5 h-10 rounded-sm border-[#243041] bg-[#0a0e14] font-mono text-sm"
+                      className="mt-1.5 h-10 rounded-sm border-[#1e293b] bg-[#090d16] font-mono text-sm"
                       data-testid="resource-name-input"
                     />
                   </label>
@@ -997,7 +1030,7 @@ export default function Home() {
                             service_tier: chosen?.name,
                           });
                         }}
-                        className="mt-1.5 h-10 w-full border border-[#243041] bg-[#0a0e14] px-2.5 font-mono text-xs text-white cursor-pointer"
+                        className="mt-1.5 h-10 w-full border border-[#1e293b] bg-[#090d16] px-2.5 font-mono text-xs text-white cursor-pointer"
                         data-testid="sku-select"
                       >
                         {skusFor(provider, selected.kind).map((s) => (
@@ -1026,7 +1059,7 @@ export default function Home() {
                               size: INSTANCE_TIERS.find((t) => t.id === e.target.value)?.weight ?? 1,
                             })
                           }
-                          className="mt-1.5 h-10 w-full border border-[#243041] bg-[#0a0e14] px-2.5 font-mono text-xs text-white cursor-pointer"
+                          className="mt-1.5 h-10 w-full border border-[#1e293b] bg-[#090d16] px-2.5 font-mono text-xs text-white cursor-pointer"
                           data-testid="tier-select"
                         >
                           {INSTANCE_TIERS.map((tier) => (
@@ -1046,7 +1079,7 @@ export default function Home() {
                           id="db-engine-select"
                           value={selected.engine ?? "postgres"}
                           onChange={(e) => updateSelected({ engine: e.target.value })}
-                          className="mt-1.5 h-10 w-full border border-[#243041] bg-[#0a0e14] px-2.5 font-mono text-xs text-white cursor-pointer"
+                          className="mt-1.5 h-10 w-full border border-[#1e293b] bg-[#090d16] px-2.5 font-mono text-xs text-white cursor-pointer"
                           data-testid="db-engine-select"
                         >
                           {enginesFor(provider).map((eng) => (
@@ -1066,7 +1099,7 @@ export default function Home() {
                           id="storage-class-select"
                           value={selected.storage_class ?? "object"}
                           onChange={(e) => updateSelected({ storage_class: e.target.value as "object" | "block_ssd" })}
-                          className="mt-1.5 h-10 w-full border border-[#243041] bg-[#0a0e14] px-2.5 font-mono text-xs text-white cursor-pointer"
+                          className="mt-1.5 h-10 w-full border border-[#1e293b] bg-[#090d16] px-2.5 font-mono text-xs text-white cursor-pointer"
                           data-testid="storage-class-select"
                         >
                           <option value="object">Object Storage (S3 / GCS / Blob)</option>
@@ -1083,7 +1116,7 @@ export default function Home() {
                           id="db-ha-select"
                           value={selected.db_ha ?? "single_az"}
                           onChange={(e) => updateSelected({ db_ha: e.target.value as "single_az" | "multi_az" })}
-                          className="mt-1.5 h-10 w-full border border-[#243041] bg-[#0a0e14] px-2.5 font-mono text-xs text-white cursor-pointer"
+                          className="mt-1.5 h-10 w-full border border-[#1e293b] bg-[#090d16] px-2.5 font-mono text-xs text-white cursor-pointer"
                           data-testid="db-ha-select"
                         >
                           <option value="single_az">Single-AZ (Standalone)</option>
@@ -1100,7 +1133,7 @@ export default function Home() {
                           id="network-service-select"
                           value={selected.network_service ?? "egress"}
                           onChange={(e) => updateSelected({ network_service: e.target.value as "egress" | "alb" })}
-                          className="mt-1.5 h-10 w-full border border-[#243041] bg-[#0a0e14] px-2.5 font-mono text-xs text-white cursor-pointer"
+                          className="mt-1.5 h-10 w-full border border-[#1e293b] bg-[#090d16] px-2.5 font-mono text-xs text-white cursor-pointer"
                           data-testid="network-service-select"
                         >
                           <option value="egress">Outbound Data Egress</option>
@@ -1119,7 +1152,7 @@ export default function Home() {
                         max={100}
                         value={selected.quantity}
                         onChange={(e) => updateSelected({ quantity: Math.max(1, Number(e.target.value)) })}
-                        className="mt-1.5 h-10 rounded-sm border-[#243041] bg-[#0a0e14] font-mono text-sm"
+                        className="mt-1.5 h-10 rounded-sm border-[#1e293b] bg-[#090d16] font-mono text-sm"
                         data-testid="resource-quantity-input"
                       />
                     </label>
@@ -1153,7 +1186,7 @@ export default function Home() {
                           step={1}
                           value={selected.size}
                           onChange={(e) => updateSelected({ size: Math.max(0.1, Number(e.target.value)) })}
-                          className="mt-1.5 h-10 rounded-sm border-[#243041] bg-[#0a0e14] font-mono text-sm"
+                          className="mt-1.5 h-10 rounded-sm border-[#1e293b] bg-[#090d16] font-mono text-sm"
                           data-testid="resource-size-input"
                         />
                       </label>
@@ -1168,7 +1201,7 @@ export default function Home() {
                         onChange={(e) =>
                           updateSelected({ environment: e.target.value as "production" | "non_production" })
                         }
-                        className="mt-1.5 h-10 w-full border border-[#243041] bg-[#0a0e14] px-2.5 font-mono text-xs text-white cursor-pointer"
+                        className="mt-1.5 h-10 w-full border border-[#1e293b] bg-[#090d16] px-2.5 font-mono text-xs text-white cursor-pointer"
                         data-testid="env-select"
                       >
                         <option value="non_production">Non-Production (Dev/Test)</option>
@@ -1178,10 +1211,10 @@ export default function Home() {
                   </div>
 
                   {/* Utilization Slider */}
-                  <div className="border-t border-[#243041]/60 pt-3">
+                  <div className="border-t border-[#1e293b]/60 pt-3">
                     <div className="mb-1.5 flex justify-between">
                       <span className="field-label">Baseline Node Utilization</span>
-                      <span className="font-mono text-sm font-bold text-[#f5c518]">{selected.utilization}%</span>
+                      <span className="font-mono text-sm font-bold text-[#f59e0b]">{selected.utilization}%</span>
                     </div>
                     <input
                       aria-label="Resource baseline utilization"
@@ -1190,20 +1223,20 @@ export default function Home() {
                       max={100}
                       value={selected.utilization}
                       onChange={(e) => updateSelected({ utilization: Number(e.target.value) })}
-                      className="w-full accent-[#f5c518] cursor-pointer"
+                      className="w-full accent-[#f59e0b] cursor-pointer"
                       data-testid="resource-utilization-slider"
                     />
                   </div>
                 </div>
               ) : (
                 <div className="p-4 text-center">
-                  <p className="text-sm text-[#8fa3b8]">Select a node on the canvas to configure hardware and pricing parameters.</p>
+                  <p className="text-sm text-[#94a3b8]">Select a node on the canvas to configure hardware and pricing parameters.</p>
                 </div>
               )}
             </div>
 
             {/* Inspector Tab Switcher */}
-            <div className="flex border-b border-[#243041] bg-[#0c1017]" data-testid="inspector-tabs">
+            <div className="flex border-b border-[#1e293b] bg-[#0e1422]" data-testid="inspector-tabs">
               {(["analysis", "insights", "scenarios", "terraform"] as Panel[]).map((panel) => (
                 <button
                   key={panel}
@@ -1211,8 +1244,8 @@ export default function Home() {
                   onClick={() => setActivePanel(panel)}
                   className={`flex-1 border-b-2 py-3.5 text-center font-mono text-xs uppercase tracking-wider transition-colors cursor-pointer ${
                     activePanel === panel
-                      ? "border-[#f5c518] bg-[#10141c] text-[#f5c518] font-bold"
-                      : "border-transparent text-[#8fa3b8] hover:text-white"
+                      ? "border-[#f59e0b] bg-[#162032] text-[#f59e0b] font-bold"
+                      : "border-transparent text-[#94a3b8] hover:text-white"
                   }`}
                   data-testid={`${panel}-tab`}
                 >
@@ -1230,7 +1263,7 @@ export default function Home() {
                     <p className="section-kicker">Monthly Cost Allocation</p>
                     <p className="mt-1 font-heading text-3xl font-bold tracking-tight text-white">
                       {currency(simulation.total_monthly_cost)}
-                      <span className="ml-2 text-sm font-normal text-[#8fa3b8]">/ month</span>
+                      <span className="ml-2 text-sm font-normal text-[#94a3b8]">/ month</span>
                     </p>
                   </div>
 
@@ -1248,22 +1281,22 @@ export default function Home() {
                   </div>
 
                   {/* Resource Breakdown Table */}
-                  <div className="space-y-2 border-t border-[#243041] pt-3">
+                  <div className="space-y-2 border-t border-[#1e293b] pt-3">
                     <p className="section-kicker">Resource Spend Breakdown</p>
                     <div className="max-h-56 space-y-1.5 overflow-auto">
                       {simulation.resource_estimates.map((item) => (
                         <div
                           key={item.resource_id}
-                          className="flex items-center justify-between border-b border-[#243041]/60 pb-1.5 text-xs font-mono"
+                          className="flex items-center justify-between border-b border-[#1e293b]/60 pb-1.5 text-xs font-mono"
                         >
-                          <span className="flex items-center gap-2 truncate text-[#c4d0dc]">
+                          <span className="flex items-center gap-2 truncate text-[#cbd5e1]">
                             <span
                               className={`size-2 shrink-0 ${
                                 item.status === "healthy"
                                   ? "bg-[#3dd68c]"
                                   : item.status === "idle"
                                     ? "bg-red-400"
-                                    : "bg-[#f5c518]"
+                                    : "bg-[#f59e0b]"
                               }`}
                             />
                             {item.resource_id}
@@ -1281,19 +1314,28 @@ export default function Home() {
                 <div data-testid="ai-insights-panel" className="space-y-4">
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="section-kicker">Cloud Cost Advisor</p>
-                      <p className="mt-0.5 font-heading text-lg font-bold text-white">10 Deterministic Audits</p>
+                      <p className="section-kicker">Your cloud cost review</p>
+                      <p className="mt-0.5 font-heading text-xl font-bold text-white">Clear ways to spend less</p>
                     </div>
-                    <Bot className="size-5 text-[#f5c518]" />
+                    <span className="grid size-10 place-items-center rounded-xl border border-[#f59e0b]/25 bg-[#f59e0b]/10"><Bot className="size-5 text-[#f59e0b]" /></span>
                   </div>
 
-                  <div className="flex items-center gap-2 border border-[#243041] bg-[#0a0e14] px-3 py-2 font-mono text-[11px] uppercase tracking-wider text-[#8fa3b8]">
-                    <span className="size-2 rounded-full bg-[#3dd68c]" />
-                    Engine: <span className="text-[#f5c518]">{providerLabel}</span>
+                  <div className="rounded-xl border border-[#3dd68c]/25 bg-gradient-to-br from-[#123329] to-[#0c1720] p-4">
+                    <p className="text-xs font-medium text-[#a7c8ba]">Estimated savings in the recommendations below</p>
+                    <div className="mt-1 flex items-end justify-between gap-2">
+                      <p className="font-heading text-3xl font-bold tracking-tight text-[#70e0a8]">{currency(potentialSavings)}<span className="ml-1 text-sm font-semibold text-[#a7c8ba]">/ month</span></p>
+                      <span className="pb-1 text-right text-xs text-[#a7c8ba]">{insights.length} {insights.length === 1 ? "suggestion" : "suggestions"}<br />{priorityCount} high priority</span>
+                    </div>
+                    <p className="mt-2 text-[11px] leading-relaxed text-[#a7c8ba]">Savings are estimates. Review each trade-off before changing your setup.</p>
+                  </div>
+
+                  <div className="flex items-center justify-between rounded-lg border border-[#1e293b] bg-[#090d16] px-3 py-2 text-xs text-[#94a3b8]">
+                    <span className="flex items-center gap-2"><span className="size-2 rounded-full bg-[#3dd68c]" />Analysis source</span>
+                    <span className="font-medium text-[#f59e0b]">{providerLabel}</span>
                   </div>
 
                   {recommendationMutation.isPending && (
-                    <div className="flex items-center gap-2 border border-[#f5c518]/30 bg-[#f5c518]/10 p-3 font-mono text-xs text-[#f5c518]">
+                    <div className="flex items-center gap-2 border border-[#f59e0b]/30 bg-[#f59e0b]/10 p-3 font-mono text-xs text-[#f59e0b]">
                       <RefreshCw className="size-4 animate-spin" /> Analyzing architecture with AI model…
                     </div>
                   )}
@@ -1302,21 +1344,24 @@ export default function Home() {
                     {insights.map((item, index) => (
                       <div
                         key={`${item.title}-${index}`}
-                        className="border border-[#243041] bg-[#0a0e14] p-3.5 space-y-2"
+                        className="space-y-3 rounded-xl border border-[#263449] bg-[#0b111d] p-4 shadow-[0_8px_24px_rgba(0,0,0,0.16)]"
                         data-testid={`recommendation-card-${index}`}
                       >
                         <div className="flex items-start justify-between gap-2">
                           <div className="flex items-center gap-2">
                             <span
-                              className={`grid size-6 shrink-0 place-items-center ${
+                              className={`grid size-7 shrink-0 place-items-center rounded-lg ${
                                 item.priority === "high"
                                   ? "bg-red-500/20 text-red-400"
-                                  : "bg-[#f5c518]/20 text-[#f5c518]"
+                                  : "bg-[#f59e0b]/20 text-[#f59e0b]"
                               }`}
                             >
                               {item.priority === "high" ? <TriangleAlert className="size-3.5" /> : <Check className="size-3.5" />}
                             </span>
-                            <p className="text-sm font-bold text-zinc-100">{item.title}</p>
+                            <div>
+                              <p className="text-sm font-bold leading-snug text-zinc-100">{item.title}</p>
+                              <span className={`mt-1 inline-block text-[10px] font-bold uppercase tracking-wider ${item.priority === "high" ? "text-red-400" : item.priority === "medium" ? "text-[#f59e0b]" : "text-[#94a3b8]"}`}>{item.priority} priority</span>
+                            </div>
                           </div>
                           {item.estimated_monthly_saving > 0 && (
                             <span className="shrink-0 rounded-xs border border-[#3dd68c]/40 bg-[#3dd68c]/10 px-2 py-0.5 font-mono text-xs font-bold text-[#3dd68c]">
@@ -1325,17 +1370,28 @@ export default function Home() {
                           )}
                         </div>
 
-                        <p className="text-xs leading-relaxed text-[#c4d0dc]">{item.rationale}</p>
+                        <div className="rounded-lg bg-[#111b2a] p-3">
+                          <p className="text-[10px] font-bold uppercase tracking-wider text-[#94a3b8]">Why this came up</p>
+                          <p className="mt-1 text-xs leading-relaxed text-[#cbd5e1]">{item.situation || item.rationale.replace(/Problem:\s*/i, "").replace(/\s*Why it matters:\s*/i, " ").split(/\s*Action:\s*/i)[0]}</p>
+                        </div>
 
-                        {item.risk && (
-                          <div className="flex items-start gap-1.5 rounded-xs bg-[#10141c] p-2 font-mono text-[11px] text-[#8fa3b8]">
-                            <Info className="size-3.5 shrink-0 text-[#f5c518] mt-0.5" />
-                            <span><strong className="text-[#c4d0dc]">Trade-off:</strong> {item.risk}</span>
+                        {!!item.benefits?.length && (
+                          <div className="rounded-lg border border-[#3dd68c]/15 bg-[#3dd68c]/[0.04] p-3">
+                            <p className="text-[10px] font-bold uppercase tracking-wider text-[#70e0a8]">Pros</p>
+                            <ul className="mt-1 list-disc space-y-1 pl-4 text-xs leading-relaxed text-[#cbd5e1]">{item.benefits.map((benefit, benefitIndex) => <li key={benefitIndex}>{benefit}</li>)}</ul>
                           </div>
                         )}
 
-                        <div className="border-t border-[#243041]/60 pt-2 font-mono text-[11px] text-[#3dd68c]">
-                          Action: {item.action}
+                        {!!(item.tradeoffs?.length || item.risk) && (
+                          <div className="flex items-start gap-1.5 rounded-xs bg-[#162032] p-2 font-mono text-[11px] text-[#94a3b8]">
+                            <Info className="size-3.5 shrink-0 text-[#f59e0b] mt-0.5" />
+                            <span><strong className="text-[#cbd5e1]">Cons / trade-offs:</strong> {[...(item.tradeoffs ?? []), ...(!item.tradeoffs?.length && item.risk ? [item.risk] : [])].join(" ")}</span>
+                          </div>
+                        )}
+
+                        <div className="flex items-start gap-2 rounded-lg border border-[#3dd68c]/20 bg-[#3dd68c]/[0.06] p-3">
+                          <Check className="mt-0.5 size-4 shrink-0 text-[#3dd68c]" />
+                          <div><p className="text-[10px] font-bold uppercase tracking-wider text-[#70e0a8]">What to do</p><p className="mt-0.5 text-xs font-medium leading-relaxed text-[#d1fae5]">{item.action}</p></div>
                         </div>
                       </div>
                     ))}
@@ -1349,7 +1405,7 @@ export default function Home() {
                     data-testid="run-ai-analysis-button"
                   >
                     <Sparkles className="mr-2 size-4" />
-                    {recommendationMutation.isPending ? "Evaluating Models…" : "Run Deep AI Advisor"}
+                    {recommendationMutation.isPending ? "Reviewing your setup…" : "Refresh recommendations"}
                   </button>
                 </div>
               )}
@@ -1360,28 +1416,28 @@ export default function Home() {
                   <div>
                     <p className="section-kicker">Multi-Cloud Parity</p>
                     <p className="mt-0.5 font-heading text-lg font-bold text-white">AWS vs GCP vs Azure</p>
-                    <p className="text-xs text-[#8fa3b8]">Identical topology simulated across cloud providers.</p>
+                    <p className="text-xs text-[#94a3b8]">Identical topology simulated across cloud providers.</p>
                   </div>
 
                   <div className="h-48 w-full" data-testid="provider-bar-chart">
                     <ResponsiveContainer width="100%" height="100%">
                       <BarChart data={providerCompare}>
-                        <XAxis dataKey="provider" tick={{ fill: "#8fa3b8", fontSize: 11 }} />
-                        <YAxis tick={{ fill: "#8fa3b8", fontSize: 11 }} width={50} />
+                        <XAxis dataKey="provider" tick={{ fill: "#94a3b8", fontSize: 11 }} />
+                        <YAxis tick={{ fill: "#94a3b8", fontSize: 11 }} width={50} />
                         <Tooltip formatter={(value: number) => currency(value)} />
-                        <Bar dataKey="monthly" fill="#f5c518" radius={[2, 2, 0, 0]} />
+                        <Bar dataKey="monthly" fill="#f59e0b" radius={[2, 2, 0, 0]} />
                       </BarChart>
                     </ResponsiveContainer>
                   </div>
 
-                  <div className="space-y-2 border-t border-[#243041] pt-3">
+                  <div className="space-y-2 border-t border-[#1e293b] pt-3">
                     {providerCompare.map((row) => (
                       <div
                         key={row.provider}
                         className={`flex items-center justify-between border p-2.5 font-mono text-xs ${
                           row.provider === provider
-                            ? "border-[#f5c518] bg-[#f5c518]/10 text-[#f5c518]"
-                            : "border-[#243041] bg-[#0a0e14] text-[#c4d0dc]"
+                            ? "border-[#f59e0b] bg-[#f59e0b]/10 text-[#f59e0b]"
+                            : "border-[#1e293b] bg-[#090d16] text-[#cbd5e1]"
                         }`}
                       >
                         <span className="font-bold uppercase tracking-wider">{row.provider}</span>
@@ -1395,7 +1451,7 @@ export default function Home() {
                                 setTfProvider(row.provider);
                                 toast.success(`Active cloud set to ${row.provider.toUpperCase()}`);
                               }}
-                              className="border border-[#243041] px-2 py-0.5 text-[10px] uppercase text-[#8fa3b8] hover:text-white cursor-pointer"
+                              className="border border-[#1e293b] px-2 py-0.5 text-[10px] uppercase text-[#94a3b8] hover:text-white cursor-pointer"
                             >
                               Switch
                             </button>
@@ -1415,11 +1471,11 @@ export default function Home() {
                       <p className="section-kicker">Infrastructure As Code</p>
                       <p className="mt-0.5 font-heading text-lg font-bold text-white">Terraform Preview</p>
                     </div>
-                    <Code2 className="size-5 text-[#f5c518]" />
+                    <Code2 className="size-5 text-[#f59e0b]" />
                   </div>
 
                   {/* Provider toggle inside Terraform panel */}
-                  <div className="flex rounded-xs border border-[#243041] bg-[#0a0e14] p-1">
+                  <div className="flex rounded-xs border border-[#1e293b] bg-[#090d16] p-1">
                     {PROVIDERS.map((p) => (
                       <button
                         key={p}
@@ -1430,8 +1486,8 @@ export default function Home() {
                         }}
                         className={`flex-1 py-1 text-center font-mono text-xs uppercase tracking-wider transition-colors cursor-pointer ${
                           tfProvider === p
-                            ? "bg-[#f5c518] text-[#0a0b0f] font-bold"
-                            : "text-[#8fa3b8] hover:text-white"
+                            ? "bg-[#f59e0b] text-[#090d16] font-bold"
+                            : "text-[#94a3b8] hover:text-white"
                         }`}
                       >
                         {p.toUpperCase()}
@@ -1440,8 +1496,8 @@ export default function Home() {
                   </div>
 
                   {!localTerraform && (
-                    <div className="border border-dashed border-[#2c3b50] p-4 text-center bg-[#0a0e14]">
-                      <p className="text-xs text-[#8fa3b8]">
+                    <div className="border border-dashed border-[#1e293b] p-4 text-center bg-[#090d16]">
+                      <p className="text-xs text-[#94a3b8]">
                         Reviewable HCL syntax for all 9 resource kinds. CloudCost IQ never executes terraform apply.
                       </p>
                     </div>
@@ -1450,7 +1506,7 @@ export default function Home() {
                   {localTerraform && (
                     <>
                       <pre
-                        className="code-window max-h-64 overflow-auto rounded-xs border border-[#243041] bg-[#040608] p-3 font-mono text-xs leading-relaxed text-[#c4d0dc]"
+                        className="code-window max-h-64 overflow-auto rounded-xs border border-[#1e293b] bg-[#040608] p-3 font-mono text-xs leading-relaxed text-[#cbd5e1]"
                         data-testid="terraform-code-output"
                       >
                         {localTerraform.configuration}
@@ -1521,17 +1577,36 @@ export default function Home() {
             </div>
 
             {/* Bottom Guardrail Footer */}
-            <div className="border-t border-[#243041] p-3 bg-[#0a0e14]/80">
+            <div className="border-t border-[#1e293b] p-3 bg-[#090d16]/80">
               <div className="flex items-start gap-2.5">
-                <ShieldCheck className="size-4 text-[#f5c518] mt-0.5 shrink-0" />
-                <p className="text-[11px] leading-tight text-[#8fa3b8]">
-                  <strong className="text-[#c4d0dc]">Simulation Safety Guarantee:</strong> Idle compute and disk retain fixed pricing invariants. Zero real cloud mutations.
+                <ShieldCheck className="size-4 text-[#f59e0b] mt-0.5 shrink-0" />
+                <p className="text-[11px] leading-tight text-[#94a3b8]">
+                  <strong className="text-[#cbd5e1]">Simulation Safety Guarantee:</strong> Idle compute and disk retain fixed pricing invariants. Zero real cloud mutations.
                 </p>
               </div>
             </div>
           </aside>
         </div>
       </main>
+      <div className="fixed bottom-5 right-5 z-50 flex flex-col items-end gap-3" data-testid="advisor-chat-widget">
+        {chatOpen && (
+          <section className="flex h-[min(34rem,calc(100svh-7rem))] w-[min(24rem,calc(100vw-2rem))] flex-col overflow-hidden rounded-2xl border border-[#263449] bg-[#0e1422] shadow-2xl" aria-label="AI Advisor chat">
+            <header className="flex items-center justify-between border-b border-[#263449] px-4 py-3">
+              <div className="flex items-center gap-2"><span className="grid size-8 place-items-center rounded-lg bg-[#f59e0b]/15"><Bot className="size-4 text-[#f59e0b]" /></span><div><p className="text-sm font-bold text-white">AI Advisor</p><p className="text-[11px] text-[#94a3b8]">{chatProvider === "groq" ? "Groq AI · workspace aware" : chatProvider === "deterministic" ? "AI unavailable · setup needed" : "Groq AI · ask about this simulation"}</p></div></div>
+              <button type="button" onClick={() => setChatOpen(false)} aria-label="Close advisor chat" className="rounded p-1 text-[#94a3b8] hover:bg-[#1e293b] hover:text-white"><X className="size-4" /></button>
+            </header>
+            <div className="flex-1 space-y-3 overflow-y-auto p-4" aria-live="polite">
+              {chatMessages.map((message, index) => <div key={`${index}-${message.role}`} className={`max-w-[90%] whitespace-pre-wrap rounded-xl px-3 py-2.5 text-sm leading-relaxed ${message.role === "user" ? "ml-auto bg-[#f59e0b] text-[#090d16]" : "border border-[#263449] bg-[#111b2a] text-[#dbe4ef]"}`}>{message.content}</div>)}
+              {chatPending && <div className="flex items-center gap-2 text-xs text-[#94a3b8]"><RefreshCw className="size-3 animate-spin" /> Thinking…</div>}
+            </div>
+            <form onSubmit={sendChatMessage} className="flex items-end gap-2 border-t border-[#263449] p-3">
+              <textarea value={chatInput} onChange={(event) => setChatInput(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); event.currentTarget.form?.requestSubmit(); } }} rows={1} maxLength={2000} placeholder="Ask about costs or savings…" aria-label="Message the AI Advisor" className="max-h-28 min-h-10 flex-1 resize-y rounded-lg border border-[#263449] bg-[#090d16] px-3 py-2.5 text-sm text-white outline-none placeholder:text-[#64748b] focus:border-[#f59e0b]" />
+              <button type="submit" disabled={!chatInput.trim() || chatPending} aria-label="Send message" className="grid size-10 shrink-0 place-items-center rounded-lg bg-[#f59e0b] text-[#090d16] disabled:opacity-40"><Send className="size-4" /></button>
+            </form>
+          </section>
+        )}
+        <button type="button" onClick={() => setChatOpen((open) => !open)} aria-expanded={chatOpen} aria-label={chatOpen ? "Close AI Advisor" : "Chat with AI Advisor"} className="flex h-12 items-center gap-2 rounded-full border border-[#f59e0b]/50 bg-[#f59e0b] px-5 font-semibold text-[#090d16] shadow-[0_8px_30px_rgba(0,0,0,0.4)] transition-transform hover:scale-[1.03]" data-testid="advisor-chat-toggle"><Bot className="size-5" /> AI Advisor</button>
+      </div>
     </div>
   );
 }
@@ -1552,17 +1627,17 @@ function Metric({
   className?: string;
 }) {
   return (
-    <div className={`bg-[#0c1017] p-5 ${className}`} data-testid={`metric-${label.toLowerCase().replaceAll(" ", "-")}`}>
+    <div className={`bg-[#0e1422] p-5 ${className}`} data-testid={`metric-${label.toLowerCase().replaceAll(" ", "-")}`}>
       <div className="flex items-start justify-between gap-3">
         <span className="section-kicker">{label}</span>
         <Icon
           className={`size-5 shrink-0 ${
-            accent === "yellow" ? "text-[#f5c518]" : accent === "green" ? "text-[#3dd68c]" : "text-[#5a6b7d]"
+            accent === "yellow" ? "text-[#f59e0b]" : accent === "green" ? "text-[#3dd68c]" : "text-[#64748b]"
           }`}
         />
       </div>
       <p className="metric-value mt-2 text-2xl font-bold font-heading text-white">{value}</p>
-      <p className="mt-1 font-mono text-xs uppercase tracking-wider text-[#8fa3b8]">{detail}</p>
+      <p className="mt-1 font-mono text-xs uppercase tracking-wider text-[#94a3b8]">{detail}</p>
     </div>
   );
 }

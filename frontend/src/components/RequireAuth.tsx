@@ -14,7 +14,7 @@ export default function RequireAuth({ children }: { children: ReactNode }) {
 
   if (meQuery.isLoading) {
     return (
-      <div className="grid min-h-svh place-items-center bg-[#09090b] text-zinc-400" data-testid="auth-loading">
+      <div className="grid min-h-svh place-items-center bg-background text-muted-foreground" data-testid="auth-loading">
         <p className="font-mono text-xs uppercase tracking-[0.2em]">Checking session…</p>
       </div>
     );

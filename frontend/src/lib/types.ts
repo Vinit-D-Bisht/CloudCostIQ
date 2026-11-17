@@ -48,6 +48,9 @@ export interface TodayResponse {
 export interface Recommendation {
   title: string;
   rationale: string;
+  situation?: string;
+  benefits?: string[];
+  tradeoffs?: string[];
   estimated_monthly_saving: number;
   priority: "low" | "medium" | "high";
   action: string;
@@ -55,9 +58,14 @@ export interface Recommendation {
 }
 
 export interface RecommendationResponse {
-  provider: "ollama" | "free_api" | "deterministic";
+  provider: "gemini" | "deterministic";
   recommendations: Recommendation[];
   generated_at: string;
+}
+
+export interface AdvisorChatResponse {
+  reply: string;
+  provider: "groq" | "deterministic";
 }
 
 export interface RecommendationRequest {

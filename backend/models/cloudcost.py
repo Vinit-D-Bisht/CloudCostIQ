@@ -101,6 +101,9 @@ class RecommendationRequest(BaseModel):
 class Recommendation(BaseModel):
     title: str
     rationale: str
+    situation: str = ""
+    benefits: list[str] = Field(default_factory=list)
+    tradeoffs: list[str] = Field(default_factory=list)
     estimated_monthly_saving: float = Field(default=0, ge=0)
     priority: Literal["low", "medium", "high"] = "medium"
     action: str
@@ -108,9 +111,23 @@ class Recommendation(BaseModel):
 
 
 class RecommendationResponse(BaseModel):
-    provider: Literal["ollama", "free_api", "deterministic"]
+    provider: Literal["gemini", "deterministic"]
     recommendations: list[Recommendation]
     generated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+
+class AdvisorChatMessage(BaseModel):
+    role: Literal["user", "assistant"]
+    content: str = Field(min_length=1, max_length=2000)
+
+
+class AdvisorChatRequest(RecommendationRequest):
+    messages: list[AdvisorChatMessage] = Field(min_length=1, max_length=20)
+
+
+class AdvisorChatResponse(BaseModel):
+    reply: str
+    provider: Literal["groq", "deterministic"]
 
 
 class TerraformRequest(BaseModel):
