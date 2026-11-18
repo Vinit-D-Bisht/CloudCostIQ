@@ -1,0 +1,58 @@
+name: test
+#on:
+#  push:
+#    branches:
+#      - main
+  workflow_dispatch:
+
+jobs:
+  push_fontend:
+    runs-on: ubuntu-latest
+    steps:
+      - name: checkout repo
+        uses: actions/checkout@7
+      
+      - name: setup docker buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v4
+        with:
+          username: ${{ secrets.DOCKER_USER }}
+          password: ${{ secrets.DOCKER_TOKEN  }}
+
+      - name: docker build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: ./frontend
+          file: ./frontend/Dockerfile
+          push: True
+          tags:
+            ${{ secrets.DOCKERHUB_USER }}/CloudCostIQ-frontend:latest
+            ${{ secrets.DOCKERHUB_TOKEN }}/CloudCostIQ-frontend:${{ github.sha }}
+
+  push_backend:
+    needs: push_frontend
+    runs-on: ubuntu-latest
+    steps:
+      - name: checkout repo
+        uses: actions/checkout@7
+
+      - name: setup docker buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v4
+        with:
+          username: ${{ secrets.DOCKER_USER  }}
+          password: ${{ secrets.DOCKER_TOKEN  }}
+
+      - name: docker build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: ./backend
+          file: ./backend/Dockerfile
+          push: True
+          tags:
+            ${{ secrets.DOCKERHUB_USER }}/CloudCostIQ-backend:latest
+            ${{ secrets.DOCKERHUB_TOKEN }}/CloudCostIQ-backtend:${{ github.sha }}
