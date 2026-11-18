@@ -27,7 +27,7 @@ spec:
           - containerPort: 3000
         envFrom:
           - configMapRef:
-              name: cloudcost-config
+              name: cc-config
           - secretRef:
               name: cloudcost-secret
         resources:

@@ -1,0 +1,27 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: cloudcostiq-ingress
+  namespace: cloudcost
+spec:
+  ingressClassName: nginx
+  rules:
+    - http:
+        paths:
+          #backend
+          - path: /api
+            pathType: Prefix
+            backend:
+              service:
+                name: backend-svc
+                port:
+                  number: 8001
+
+          #frontend
+          - path: /
+            pathType: Prefix
+            frontend:
+              service:
+                name: frontend-svc
+                port:
+                  number: 3000
