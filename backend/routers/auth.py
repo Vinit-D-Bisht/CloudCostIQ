@@ -121,7 +121,7 @@ async def google_callback(code: str = ""):
     if not code:
         raise HTTPException(status_code=400, detail="Missing OAuth code")
 
-    async with httpx.AsyncClient(timeout=httpx.Timeout(connect=2.0, read=6.0)) as client:
+    async with httpx.AsyncClient(timeout=httpx.Timeout(10.0,connect=2.0, read=6.0)) as client:
         token_res = await client.post(
             "https://oauth2.googleapis.com/token",
             data={
