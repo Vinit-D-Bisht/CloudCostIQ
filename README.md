@@ -6,19 +6,20 @@ Estimate, compare, and optimize cloud infrastructure costs before deployment.
 
 CloudCostIQ lets you simulate workloads across AWS, Google Cloud, and Azure, explore cost-saving opportunities, and generate Terraform configuration previews — all from one dashboard.
 
-**No cloud credentials. No actual cloud provisioning. Just smarter infrastructure planning.**
+**No cloud credentials are required for cost simulation. No actual customer infrastructure is provisioned by the cost estimator.**
+
+---
 
 <p align="center">
-
-![Docker](https://img.shields.io/badge/Docker-2496ED?logo=docker&logoColor=white)
-![Python](https://img.shields.io/badge/Python-3.12+-3776AB?logo=python&logoColor=white)
-![FastAPI](https://img.shields.io/badge/FastAPI-009688?logo=fastapi&logoColor=white)
-![Next.js](https://img.shields.io/badge/Next.js-000000?logo=next.js&logoColor=white)
-![Kubernetes](https://img.shields.io/badge/Kubernetes-326CE5?logo=kubernetes&logoColor=white)
-![Argo CD](https://img.shields.io/badge/Argo_CD-GitOps-EF7B4D?logo=argo&logoColor=white)
-![Terraform](https://img.shields.io/badge/Terraform-844FBA?logo=terraform&logoColor=white)
-![MongoDB](https://img.shields.io/badge/MongoDB-47A248?logo=mongodb&logoColor=white)
-
+  <a href="https://www.docker.com/"><img src="https://img.shields.io/badge/Docker-2496ED?logo=docker&logoColor=white" alt="Docker"></a>
+  <a href="https://www.python.org/"><img src="https://img.shields.io/badge/Python-3.12+-3776AB?logo=python&logoColor=white" alt="Python"></a>
+  <a href="https://fastapi.tiangolo.com/"><img src="https://img.shields.io/badge/FastAPI-009688?logo=fastapi&logoColor=white" alt="FastAPI"></a>
+  <a href="https://nextjs.org/"><img src="https://img.shields.io/badge/Next.js-000000?logo=next.js&logoColor=white" alt="Next.js"></a>
+  <a href="https://kubernetes.io/"><img src="https://img.shields.io/badge/Kubernetes-326CE5?logo=kubernetes&logoColor=white" alt="Kubernetes"></a>
+  <a href="https://argo-cd.readthedocs.io/"><img src="https://img.shields.io/badge/Argo_CD-GitOps-EF7B4D?logo=argo&logoColor=white" alt="Argo CD"></a>
+  <a href="https://developer.hashicorp.com/terraform"><img src="https://img.shields.io/badge/Terraform-844FBA?logo=terraform&logoColor=white" alt="Terraform"></a>
+  <a href="https://www.mongodb.com/"><img src="https://img.shields.io/badge/MongoDB-47A248?logo=mongodb&logoColor=white" alt="MongoDB"></a>
+  <a href="https://github.com/features/actions"><img src="https://img.shields.io/badge/GitHub_Actions-2088FF?logo=githubactions&logoColor=white" alt="GitHub Actions"></a>
 </p>
 
 ---
@@ -53,43 +54,82 @@ CloudCostIQ lets you simulate workloads across AWS, Google Cloud, and Azure, exp
 - **AI Chatbot** — Conversational infrastructure assistance powered by Groq.
 - **Terraform Preview** — Generate and validate Terraform configuration previews before using them in real infrastructure.
 - **Workspace Management** — Save and reload workload configurations.
-- **Containerized Deployment** — Run the complete application using Docker Compose.
+- **Containerized Deployment** — Run the application using Docker Compose.
+- **CI/CD Automation** — Build and validate application changes using GitHub Actions.
+- **Kubernetes Deployment** — Deploy the application using Kubernetes manifests.
 - **GitOps Deployment** — Manage Kubernetes deployments through Argo CD with automated synchronization and self-healing.
+- **AWS Infrastructure Automation** — Provision the project's EKS environment using Terraform.
 
 ---
 
 ## 🏗️ Architecture
 
+### Application and GitOps Architecture
+
 ```text
-             Developer
-                 |
-                 v
-             GitHub
-                 |
-          GitHub Actions
-                 |
-          Build & Validate
-                 |
-                 v
-          Docker Images
-                 |
-                 v
-          Kubernetes Cluster
-                 |
-              Argo CD
-                 |
-          GitOps Synchronization
-                 |
-       +---------+----------+
-       |                    |
-       v                    v
-    Frontend              Backend
-    Next.js               FastAPI
-       |                    |
-       +---------+----------+
-                 |
-                 v
-              MongoDB
+                 Developer
+                     |
+                     v
+               GitHub Repository
+                     |
+                     v
+              GitHub Actions
+                     |
+              Build & Validate
+                     |
+                     v
+               Docker Images
+                     |
+                     v
+              Container Registry
+                     |
+                     v
+              Kubernetes Cluster
+                     |
+                  Argo CD
+                     |
+              GitOps Synchronization
+                     |
+              +------+------+
+              |             |
+              v             v
+           Frontend       Backend
+           Next.js        FastAPI
+              |             |
+              +------+------+
+                     |
+                     v
+                  MongoDB
+```
+
+### Infrastructure Architecture
+
+```text
+                    Terraform
+                        |
+                        v
+                   AWS Cloud
+                        |
+                        v
+                       VPC
+                        |
+          +-------------+-------------+
+          |             |             |
+          v             v             v
+      Public         Private        Intra
+      Subnets        Subnets        Subnets
+                        |
+                        v
+                   Amazon EKS
+                        |
+                        v
+                Managed Node Group
+                        |
+              +---------+---------+
+              |                   |
+              v                   v
+          Kubernetes            Argo CD
+          Workloads          GitOps Delivery
 ```
 
 ### Technology Stack
@@ -100,10 +140,13 @@ CloudCostIQ lets you simulate workloads across AWS, Google Cloud, and Azure, exp
 | Backend | Python, FastAPI |
 | Database | MongoDB |
 | Containerization | Docker, Docker Compose |
-| CI/CD | GitHub Actions |
+| CI | GitHub Actions |
+| Container Registry | Docker Hub |
 | GitOps / CD | Argo CD |
 | Orchestration | Kubernetes |
-| Infrastructure Preview | Terraform |
+| Infrastructure as Code | Terraform |
+| Cloud Infrastructure | AWS EKS, VPC, EC2 |
+| Storage Integration | AWS EBS CSI Driver |
 | AI Recommendations | Google Gemini |
 | AI Chatbot | Groq |
 
@@ -116,35 +159,35 @@ CloudCostIQ uses separate Git branches to organize application development and D
 | Branch | Purpose |
 |---|---|
 | `main` | Main application code and stable project version |
-| `dev` | DevOps implementation, Kubernetes manifests, Argo CD GitOps configuration, and deployment workflow |
+| `dev` | DevOps implementation, Kubernetes manifests, Argo CD configuration, and deployment workflow |
 
 ### Development Workflow
 
 ```text
-             main
-               |
-        Application Code
-               |
-               v
-              dev
-               |
-       DevOps & GitOps
-        Implementation
-               |
-       +-------+-------+
-       |               |
-   GitHub Actions   Kubernetes
-      Workflow       Manifests
-       |               |
-       +-------+-------+
-               |
-             Argo CD
-               |
-               v
-       Kubernetes Cluster
+                 main
+                   |
+            Application Code
+                   |
+                   v
+                  dev
+                   |
+           DevOps Implementation
+                   |
+          +--------+--------+
+          |                 |
+          v                 v
+     GitHub Actions    Kubernetes
+        Workflow        Manifests
+          |                 |
+          +--------+--------+
+                   |
+                 Argo CD
+                   |
+                   v
+           Kubernetes Cluster
 ```
 
-The `dev` branch is configured as the source for Argo CD synchronization, allowing changes to Kubernetes manifests to be detected and deployed automatically.
+The `dev` branch is used as the source for Argo CD synchronization. Changes to the configured Kubernetes manifests are detected and deployed through the GitOps workflow.
 
 ---
 
@@ -194,7 +237,7 @@ On the first run, the script creates `backend/.env` from the example settings an
 - Node.js 20+
 - MongoDB
 
-**1. Start MongoDB**
+### 1. Start MongoDB
 
 Make sure MongoDB is running at:
 
@@ -202,7 +245,7 @@ Make sure MongoDB is running at:
 mongodb://localhost:27017
 ```
 
-**2. Start the Backend**
+### 2. Start the Backend
 
 ```bash
 cd backend
@@ -217,7 +260,7 @@ pip install -r requirements.txt
 uvicorn server:app --reload --port 8001
 ```
 
-**3. Start the Frontend**
+### 3. Start the Frontend
 
 Open another terminal:
 
@@ -240,7 +283,7 @@ npm run dev
 
 ## ☸️ Kubernetes & GitOps
 
-CloudCostIQ includes Kubernetes manifests and an Argo CD-based GitOps workflow.
+CloudCostIQ includes Kubernetes manifests and an Argo CD-based GitOps deployment workflow.
 
 ### Kubernetes Components
 
@@ -254,31 +297,31 @@ CloudCostIQ includes Kubernetes manifests and an Argo CD-based GitOps workflow.
 
 ### Argo CD GitOps
 
-The deployment workflow uses Git as the source of truth.
+Git acts as the source of truth for the desired Kubernetes application state.
 
 ```text
 Developer Push (dev)
         |
         v
-   GitHub Repository
+  GitHub Repository
         |
         v
    GitHub Actions
         |
         v
-   Build & Validate
+ Build & Validate
         |
         v
-  Kubernetes Manifests
+ Kubernetes Manifests
         |
         v
       Argo CD
         |
         v
-   Detect Git Changes
+ Detect Git Changes
         |
         v
- Automatic Synchronization
+Automatic Synchronization
         |
         v
  Kubernetes Workloads
@@ -320,16 +363,82 @@ The root Argo CD Application manages child Applications for CloudCostIQ and moni
 
 ---
 
+## ☁️ AWS Infrastructure with Terraform
+
+CloudCostIQ includes Terraform configuration for provisioning the AWS infrastructure used for the Kubernetes deployment.
+
+### Infrastructure Configuration
+
+| Resource | Configuration |
+|---|---|
+| AWS Region | `us-east-2` |
+| VPC CIDR | `10.0.0.0/16` |
+| Availability Zones | 3 |
+| Public Subnets | 3 |
+| Private Subnets | 3 |
+| Intra Subnets | 3 |
+| NAT Gateway | Single NAT Gateway |
+| EKS Cluster | `cloudcost-eks` |
+| Kubernetes Version | `1.35` |
+| Managed Node Group | `bankapp-ng` |
+| Instance Type | `m7i-flex.large` |
+| Desired Nodes | 2 |
+| Maximum Nodes | 2 |
+| Argo CD Namespace | `argocd` |
+
+### Terraform Components
+
+| File | Responsibility |
+|---|---|
+| `providers.tf` | Terraform requirements and AWS/Helm providers |
+| `variables.tf` | Configurable infrastructure inputs |
+| `terraform.tfvars` | Environment-specific variable values |
+| `vpc.tf` | VPC, subnets, and NAT Gateway |
+| `eks.tf` | EKS cluster, managed node group, add-ons, and EBS CSI integration |
+| `argocd.tf` | Argo CD installation using Helm |
+| `outputs.tf` | Cluster information and useful outputs |
+
+### Provision Infrastructure
+
+```bash
+cd terraform
+
+terraform init
+terraform fmt -recursive
+terraform validate
+terraform plan
+terraform apply
+```
+
+### Configure kubectl
+
+```bash
+aws eks update-kubeconfig \
+  --region us-east-2 \
+  --name cloudcost-eks
+```
+
+Verify the cluster:
+
+```bash
+kubectl get nodes
+kubectl get pods -A
+```
+
+**Important:** Terraform provisions actual AWS resources and can incur charges. The CloudCostIQ cost simulation feature itself does not provision customer infrastructure. Review the Terraform plan and AWS costs before applying.
+
+---
+
 ## 🤖 AI Integration
 
-CloudCostIQ supports two separate AI integrations:
+CloudCostIQ supports two AI integrations:
 
 | Provider | Purpose |
 |---|---|
 | Google Gemini | AI-generated cost optimization recommendations |
 | Groq | Conversational AI chatbot |
 
-Both providers require API keys and offer free usage tiers subject to account-specific quotas and provider policies.
+Both providers require API keys and have usage limits depending on their respective plans.
 
 If an AI provider is not configured:
 
@@ -387,9 +496,19 @@ CloudCostIQ/
 │
 ├── k8s/                    # Kubernetes manifests
 │
+├── terraform/              # AWS infrastructure configuration
+│   ├── providers.tf
+│   ├── variables.tf
+│   ├── terraform.tfvars
+│   ├── vpc.tf
+│   ├── eks.tf
+│   ├── argocd.tf
+│   ├── outputs.tf
+│   └── README.md
+│
 ├── docs/                   # Project documentation
 ├── tests/                  # Application tests
-├── memory/                 # Project memory/context files
+├── memory/                 # Project context files
 │
 ├── docker-compose.yml
 ├── run.sh
@@ -402,9 +521,11 @@ CloudCostIQ/
 
 ## 🎯 Project Goals
 
-CloudCostIQ explores how cloud cost estimation, infrastructure planning, AI-assisted recommendations, containerization, Kubernetes orchestration, and GitOps can work together in a single platform.
+CloudCostIQ brings together cloud cost estimation, infrastructure planning, AI-assisted recommendations, containerization, Kubernetes orchestration, Infrastructure as Code, and GitOps.
 
-**Important:** CloudCostIQ simulates cloud costs and generates Terraform previews. It does not provision actual AWS, Google Cloud, or Azure resources. Cost estimates are simulations and should not be treated as live provider quotations.
+The project demonstrates how developers and DevOps engineers can evaluate infrastructure costs before deployment while using modern DevOps practices to manage an application environment.
+
+**Important distinction:** CloudCostIQ simulates cloud costs and generates Terraform previews for planned workloads. Its Terraform deployment configuration separately provisions the AWS infrastructure used to host and manage the project. Cost estimates are simulations and should not be treated as live provider quotations.
 
 ---
 
