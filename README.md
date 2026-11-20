@@ -11,15 +11,15 @@ CloudCostIQ lets you simulate workloads across AWS, Google Cloud, and Azure, exp
 ---
 
 <p align="center">
-  <a href="https://www.docker.com/"><img src="https://img.shields.io/badge/Docker-2496ED?logo=docker&logoColor=white" alt="Docker"></a>
-  <a href="https://www.python.org/"><img src="https://img.shields.io/badge/Python-3.12+-3776AB?logo=python&logoColor=white" alt="Python"></a>
-  <a href="https://fastapi.tiangolo.com/"><img src="https://img.shields.io/badge/FastAPI-009688?logo=fastapi&logoColor=white" alt="FastAPI"></a>
-  <a href="https://nextjs.org/"><img src="https://img.shields.io/badge/Next.js-000000?logo=next.js&logoColor=white" alt="Next.js"></a>
-  <a href="https://kubernetes.io/"><img src="https://img.shields.io/badge/Kubernetes-326CE5?logo=kubernetes&logoColor=white" alt="Kubernetes"></a>
-  <a href="https://argo-cd.readthedocs.io/"><img src="https://img.shields.io/badge/Argo_CD-GitOps-EF7B4D?logo=argo&logoColor=white" alt="Argo CD"></a>
-  <a href="https://developer.hashicorp.com/terraform"><img src="https://img.shields.io/badge/Terraform-844FBA?logo=terraform&logoColor=white" alt="Terraform"></a>
-  <a href="https://www.mongodb.com/"><img src="https://img.shields.io/badge/MongoDB-47A248?logo=mongodb&logoColor=white" alt="MongoDB"></a>
-  <a href="https://github.com/features/actions"><img src="https://img.shields.io/badge/GitHub_Actions-2088FF?logo=githubactions&logoColor=white" alt="GitHub Actions"></a>
+  <a href="https://www.docker.com/" target="_blank" rel="noopener noreferrer"><img src="https://img.shields.io/badge/Docker-2496ED?logo=docker&logoColor=white" alt="Docker"></a>
+  <a href="https://www.python.org/" target="_blank" rel="noopener noreferrer"><img src="https://img.shields.io/badge/Python-3.12+-3776AB?logo=python&logoColor=white" alt="Python"></a>
+  <a href="https://fastapi.tiangolo.com/" target="_blank" rel="noopener noreferrer"><img src="https://img.shields.io/badge/FastAPI-009688?logo=fastapi&logoColor=white" alt="FastAPI"></a>
+  <a href="https://nextjs.org/" target="_blank" rel="noopener noreferrer"><img src="https://img.shields.io/badge/Next.js-000000?logo=next.js&logoColor=white" alt="Next.js"></a>
+  <a href="https://kubernetes.io/" target="_blank" rel="noopener noreferrer"><img src="https://img.shields.io/badge/Kubernetes-326CE5?logo=kubernetes&logoColor=white" alt="Kubernetes"></a>
+  <a href="https://argo-cd.readthedocs.io/" target="_blank" rel="noopener noreferrer"><img src="https://img.shields.io/badge/Argo_CD-GitOps-EF7B4D?logo=argo&logoColor=white" alt="Argo CD"></a>
+  <a href="https://developer.hashicorp.com/terraform" target="_blank" rel="noopener noreferrer"><img src="https://img.shields.io/badge/Terraform-844FBA?logo=terraform&logoColor=white" alt="Terraform"></a>
+  <a href="https://www.mongodb.com/" target="_blank" rel="noopener noreferrer"><img src="https://img.shields.io/badge/MongoDB-47A248?logo=mongodb&logoColor=white" alt="MongoDB"></a>
+  <a href="https://github.com/features/actions" target="_blank" rel="noopener noreferrer"><img src="https://img.shields.io/badge/GitHub_Actions-2088FF?logo=githubactions&logoColor=white" alt="GitHub Actions"></a>
 </p>
 
 ---
@@ -33,13 +33,13 @@ CloudCostIQ lets you simulate workloads across AWS, Google Cloud, and Azure, exp
 </p>
 
 <p align="center">
-  <img src="screenshots/cost-comparison.png" alt="Multi-cloud Cost Comparison" width="100%">
+  <img src="screenshots/cost-comparison.png" alt="Multi-cloud Cost Comparison" width="500" height="500">
   <br>
   <em>Multi-Cloud Cost Comparison</em>
 </p>
 
 <p align="center">
-  <img src="screenshots/terraform-preview.png" alt="Terraform Configuration Preview" width="100%">
+  <img src="screenshots/terraform-preview.png" alt="Terraform Configuration Preview" width="500" height="500">
   <br>
   <em>Terraform Configuration Preview</em>
 </p>
