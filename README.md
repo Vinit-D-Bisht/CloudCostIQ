@@ -33,13 +33,13 @@ CloudCostIQ lets you simulate workloads across AWS, Google Cloud, and Azure, exp
 </p>
 
 <p align="center">
-  <img src="screenshots/cost-comparison.png" alt="Multi-cloud Cost Comparison" width="600" height="500">
+  <img src="screenshots/cost-comparison.png" alt="Multi-cloud Cost Comparison" width="500" height="500">
   <br>
   <em>Multi-Cloud Cost Comparison</em>
 </p>
 
 <p align="center">
-  <img src="screenshots/terraform-preview.png" alt="Terraform Configuration Preview" width="100%">
+  <img src="screenshots/terraform-preview.png" alt="Terraform Configuration Preview" width="500" height="500">
   <br>
   <em>Terraform Configuration Preview</em>
 </p>
