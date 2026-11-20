@@ -33,7 +33,7 @@ CloudCostIQ lets you simulate workloads across AWS, Google Cloud, and Azure, exp
 </p>
 
 <p align="center">
-  <img src="screenshots/cost-comparison.png" alt="Multi-cloud Cost Comparison" width="300" height="200">
+  <img src="screenshots/cost-comparison.png" alt="Multi-cloud Cost Comparison" width="600" height="600">
   <br>
   <em>Multi-Cloud Cost Comparison</em>
 </p>
