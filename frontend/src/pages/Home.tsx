@@ -73,6 +73,7 @@ import {
 } from "@/lib/sim";
 import { generateTerraform, validateTerraform } from "@/lib/terraform";
 import type {
+  AdvisorChatHistoryResponse,
   AdvisorChatResponse,
   AuthResponse,
   RecommendationRequest,
@@ -85,7 +86,9 @@ import type {
 import { setAuthMode } from "@/lib/workspace-store";
 
 type Panel = "analysis" | "insights" | "scenarios" | "terraform";
-type ChatMessage = { role: "user" | "assistant"; content: string };
+type ChatMessage = { role: "user" | "assistant"; content: string; tools_used?: string[] };
+
+const CHAT_GREETING = "Hi! Ask me about this setup, its estimated costs, or ways to optimize it.";
 
 const KIND_COLOR: Record<ResourceKind, string> = {
   vm: "#f59e0b",
@@ -141,9 +144,11 @@ export default function Home() {
   const [chatOpen, setChatOpen] = useState(false);
   const [chatInput, setChatInput] = useState("");
   const [chatPending, setChatPending] = useState(false);
-  const [chatProvider, setChatProvider] = useState<"groq" | "deterministic" | null>(null);
+  const [chatProvider, setChatProvider] = useState<"groq" | "unavailable" | null>(null);
+  const [chatConversationId, setChatConversationId] = useState<string | null>(null);
+  const [chatHistoryLoaded, setChatHistoryLoaded] = useState(false);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([
-    { role: "assistant", content: "Hi! Ask me about this setup, its estimated costs, or ways to optimize it." },
+    { role: "assistant", content: CHAT_GREETING },
   ]);
 
   const meQuery = useQuery({
@@ -152,6 +157,32 @@ export default function Home() {
     retry: false,
   });
   const user = meQuery.data?.user;
+
+  useEffect(() => {
+    let cancelled = false;
+    apiGet<AdvisorChatHistoryResponse>("/recommendations/chat/latest")
+      .then((history) => {
+        if (cancelled || !history.conversation_id) return;
+        setChatConversationId(history.conversation_id);
+        setChatMessages([
+          { role: "assistant", content: CHAT_GREETING },
+          ...history.messages.map((message) => ({
+            role: message.role,
+            content: message.content,
+            tools_used: message.tools_used,
+          })),
+        ]);
+      })
+      .catch(() => {
+        // Chat history is optional until the user is authenticated.
+      })
+      .finally(() => {
+        if (!cancelled) setChatHistoryLoaded(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     setAuthMode(true);
@@ -271,19 +302,21 @@ export default function Home() {
       pricing_model: pricingModel,
       region,
       workload,
+      hours_per_month: hoursPerMonth,
     });
   }
 
   async function sendChatMessage(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const content = chatInput.trim();
-    if (!content || chatPending) return;
+    if (!content || chatPending || !chatHistoryLoaded) return;
     const nextMessages = [...chatMessages, { role: "user" as const, content }];
     setChatMessages(nextMessages);
     setChatInput("");
     setChatPending(true);
     try {
       const response = await apiPost<AdvisorChatResponse>("/recommendations/chat", {
+        conversation_id: chatConversationId,
         messages: nextMessages.slice(-20),
         resources,
         simulation,
@@ -291,9 +324,14 @@ export default function Home() {
         pricing_model: pricingModel,
         region,
         workload,
+        hours_per_month: hoursPerMonth,
       });
       setChatProvider(response.provider);
-      setChatMessages((current) => [...current, { role: "assistant", content: response.reply }]);
+      setChatConversationId(response.conversation_id);
+      setChatMessages((current) => [
+        ...current,
+        { role: "assistant", content: response.reply, tools_used: response.tools_used },
+      ]);
     } catch {
       setChatMessages((current) => [...current, { role: "assistant", content: "I couldn't reach the advisor right now. Please try again." }]);
     } finally {
@@ -1498,7 +1536,7 @@ export default function Home() {
                   {!localTerraform && (
                     <div className="border border-dashed border-[#1e293b] p-4 text-center bg-[#090d16]">
                       <p className="text-xs text-[#94a3b8]">
-                        Reviewable HCL syntax for all 9 resource kinds. CloudCost IQ never executes terraform apply.
+                        Illustrative Terraform templates for 9 resource kinds. Not CLI-validated or deployment-ready. CloudCostIQ never runs terraform apply.
                       </p>
                     </div>
                   )}
@@ -1522,7 +1560,7 @@ export default function Home() {
                         >
                           <div className="flex items-center gap-2 font-bold font-mono">
                             {localValidation.valid ? <Check className="size-4" /> : <X className="size-4" />}
-                            {localValidation.valid ? "HCL Structure Validated (6 Checks Run)" : "HCL Attention Required"}
+                            {localValidation.valid ? "CloudCostIQ Checks Passed (6 Checks Run)" : "HCL Attention Required"}
                           </div>
                           {[...localValidation.errors, ...localValidation.warnings].map((msg, i) => (
                             <p key={i} className="mt-1 font-mono text-[11px] opacity-90">
@@ -1592,16 +1630,26 @@ export default function Home() {
         {chatOpen && (
           <section className="flex h-[min(34rem,calc(100svh-7rem))] w-[min(24rem,calc(100vw-2rem))] flex-col overflow-hidden rounded-2xl border border-[#263449] bg-[#0e1422] shadow-2xl" aria-label="AI Advisor chat">
             <header className="flex items-center justify-between border-b border-[#263449] px-4 py-3">
-              <div className="flex items-center gap-2"><span className="grid size-8 place-items-center rounded-lg bg-[#f59e0b]/15"><Bot className="size-4 text-[#f59e0b]" /></span><div><p className="text-sm font-bold text-white">AI Advisor</p><p className="text-[11px] text-[#94a3b8]">{chatProvider === "groq" ? "Groq AI · workspace aware" : chatProvider === "deterministic" ? "AI unavailable · setup needed" : "Groq AI · ask about this simulation"}</p></div></div>
+              <div className="flex items-center gap-2"><span className="grid size-8 place-items-center rounded-lg bg-[#f59e0b]/15"><Bot className="size-4 text-[#f59e0b]" /></span><div><p className="text-sm font-bold text-white">AI Advisor</p><p className="text-[11px] text-[#94a3b8]">{chatProvider === "groq" ? "Groq AI · workspace aware" : chatProvider === "unavailable" ? "AI unavailable · setup needed" : "Groq AI · ask about this simulation"}</p></div></div>
               <button type="button" onClick={() => setChatOpen(false)} aria-label="Close advisor chat" className="rounded p-1 text-[#94a3b8] hover:bg-[#1e293b] hover:text-white"><X className="size-4" /></button>
             </header>
             <div className="flex-1 space-y-3 overflow-y-auto p-4" aria-live="polite">
-              {chatMessages.map((message, index) => <div key={`${index}-${message.role}`} className={`max-w-[90%] whitespace-pre-wrap rounded-xl px-3 py-2.5 text-sm leading-relaxed ${message.role === "user" ? "ml-auto bg-[#f59e0b] text-[#090d16]" : "border border-[#263449] bg-[#111b2a] text-[#dbe4ef]"}`}>{message.content}</div>)}
+              {chatMessages.map((message, index) => (
+                <div key={`${index}-${message.role}`} className={`max-w-[90%] whitespace-pre-wrap rounded-xl px-3 py-2.5 text-sm leading-relaxed ${message.role === "user" ? "ml-auto bg-[#f59e0b] text-[#090d16]" : "border border-[#263449] bg-[#111b2a] text-[#dbe4ef]"}`}>
+                  {message.content}
+                  {message.tools_used && message.tools_used.length > 0 && (
+                    <p className="mt-2 border-t border-[#263449] pt-1.5 text-[10px] uppercase tracking-wide text-[#f5c451]">
+                      Tools: {message.tools_used.map((tool) => tool.replaceAll("_", " ")).join(" · ")}
+                    </p>
+                  )}
+                </div>
+              ))}
+              {!chatHistoryLoaded && <div className="flex items-center gap-2 text-xs text-[#94a3b8]"><RefreshCw className="size-3 animate-spin" /> Loading chat history…</div>}
               {chatPending && <div className="flex items-center gap-2 text-xs text-[#94a3b8]"><RefreshCw className="size-3 animate-spin" /> Thinking…</div>}
             </div>
             <form onSubmit={sendChatMessage} className="flex items-end gap-2 border-t border-[#263449] p-3">
               <textarea value={chatInput} onChange={(event) => setChatInput(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); event.currentTarget.form?.requestSubmit(); } }} rows={1} maxLength={2000} placeholder="Ask about costs or savings…" aria-label="Message the AI Advisor" className="max-h-28 min-h-10 flex-1 resize-y rounded-lg border border-[#263449] bg-[#090d16] px-3 py-2.5 text-sm text-white outline-none placeholder:text-[#64748b] focus:border-[#f59e0b]" />
-              <button type="submit" disabled={!chatInput.trim() || chatPending} aria-label="Send message" className="grid size-10 shrink-0 place-items-center rounded-lg bg-[#f59e0b] text-[#090d16] disabled:opacity-40"><Send className="size-4" /></button>
+              <button type="submit" disabled={!chatInput.trim() || chatPending || !chatHistoryLoaded} aria-label="Send message" className="grid size-10 shrink-0 place-items-center rounded-lg bg-[#f59e0b] text-[#090d16] disabled:opacity-40"><Send className="size-4" /></button>
             </form>
           </section>
         )}

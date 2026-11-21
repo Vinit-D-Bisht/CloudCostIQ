@@ -510,7 +510,10 @@ export function validateTerraform(
   hcl?: string,
 ): TerraformValidation {
   const errors: string[] = [];
-  const warnings: string[] = [];
+  const warnings: string[] = [
+    "CloudCostIQ performs basic rule checks only; Terraform CLI validation was not run.",
+    "Generated HCL is an illustrative template, not confirmed deployment-ready infrastructure.",
+  ];
   const clean = resources.map(sanitizeResource);
   const names = clean.map((r) => r.name.trim().toLowerCase());
 
@@ -536,6 +539,17 @@ export function validateTerraform(
   const opens = (text.match(/\{/g) || []).length;
   const closes = (text.match(/\}/g) || []).length;
   if (opens !== closes) errors.push("Unbalanced HCL blocks detected.");
+  const placeholders: Record<string, string> = {
+    "placeholder.zip": "Lambda deployment ZIP is a placeholder.",
+    "plan-placeholder": "Azure Function service plan ID is a placeholder.",
+    "env-placeholder": "Azure Container Apps environment ID is a placeholder.",
+    "ChangeMe-SimOnly!": "Azure database password is a simulation placeholder; replace it with a secure secret.",
+    "network_interface_ids = []": "Azure VM has no network interface configured.",
+    "123456789012:role/cloudcostiq-sim": "AWS Lambda IAM role ARN is an example placeholder.",
+  };
+  for (const [marker, warning] of Object.entries(placeholders)) {
+    if (text.includes(marker)) warnings.push(warning);
+  }
 
   return {
     valid: errors.length === 0,

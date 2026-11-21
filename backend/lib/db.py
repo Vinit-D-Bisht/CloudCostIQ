@@ -27,6 +27,9 @@ INDEXES: dict[str, list[IndexModel]] = {
     "workspaces": [
         IndexModel([("user_id", ASCENDING), ("updated_at", DESCENDING)], name="user_updated_desc"),
     ],
+    "advisor_conversations": [
+        IndexModel([("user_id", ASCENDING), ("updated_at", DESCENDING)], name="user_updated_desc"),
+    ],
     "password_resets": [
         IndexModel([("token", ASCENDING)], name="reset_token_unique", unique=True),
         IndexModel([("expires_at", ASCENDING)], name="reset_expires"),
