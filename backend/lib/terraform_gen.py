@@ -477,7 +477,10 @@ def generate(resources: list[Any], provider: str = "aws") -> str:
 
 def validate(resources: list[Any], provider: str = "aws", hcl: str | None = None) -> dict[str, Any]:
     errors: list[str] = []
-    warnings: list[str] = []
+    warnings: list[str] = [
+        "CloudCostIQ performs basic rule checks only; Terraform CLI validation was not run.",
+        "Generated HCL is an illustrative template, not confirmed deployment-ready infrastructure.",
+    ]
     rows = [_as_dict(item) for item in resources]
     names = [str(item.get("name", "")).strip().lower() for item in rows]
 
@@ -505,6 +508,17 @@ def validate(resources: list[Any], provider: str = "aws", hcl: str | None = None
     text = hcl if hcl is not None else generate(resources, provider)
     if text.count("{") != text.count("}"):
         errors.append("Unbalanced HCL blocks detected.")
+    placeholders = {
+        "placeholder.zip": "Lambda deployment ZIP is a placeholder.",
+        "plan-placeholder": "Azure Function service plan ID is a placeholder.",
+        "env-placeholder": "Azure Container Apps environment ID is a placeholder.",
+        "ChangeMe-SimOnly!": "Azure database password is a simulation placeholder; replace it with a secure secret.",
+        "network_interface_ids = []": "Azure VM has no network interface configured.",
+        "123456789012:role/cloudcostiq-sim": "AWS Lambda IAM role ARN is an example placeholder.",
+    }
+    for marker, warning in placeholders.items():
+        if marker in text:
+            warnings.append(warning)
 
     return {
         "valid": not errors,

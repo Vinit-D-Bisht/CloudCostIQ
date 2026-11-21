@@ -96,6 +96,7 @@ class RecommendationRequest(BaseModel):
     pricing_model: PricingModel = "on_demand"
     region: RegionKey = "us-east"
     workload: int = Field(default=52, ge=0, le=100)
+    hours_per_month: int = Field(default=730, ge=1, le=744)
 
 
 class Recommendation(BaseModel):
@@ -118,16 +119,30 @@ class RecommendationResponse(BaseModel):
 
 class AdvisorChatMessage(BaseModel):
     role: Literal["user", "assistant"]
-    content: str = Field(min_length=1, max_length=2000)
+    content: str = Field(min_length=1, max_length=4000)
 
 
 class AdvisorChatRequest(RecommendationRequest):
     messages: list[AdvisorChatMessage] = Field(min_length=1, max_length=20)
+    conversation_id: str | None = Field(default=None, min_length=1, max_length=64)
+
+
+class AdvisorChatHistoryMessage(BaseModel):
+    role: Literal["user", "assistant"]
+    content: str = Field(min_length=1, max_length=4000)
+    tools_used: list[str] = Field(default_factory=list)
+
+
+class AdvisorChatHistoryResponse(BaseModel):
+    conversation_id: str | None = None
+    messages: list[AdvisorChatHistoryMessage] = Field(default_factory=list)
 
 
 class AdvisorChatResponse(BaseModel):
     reply: str
-    provider: Literal["groq", "deterministic"]
+    provider: Literal["groq", "unavailable"]
+    conversation_id: str
+    tools_used: list[str] = Field(default_factory=list)
 
 
 class TerraformRequest(BaseModel):

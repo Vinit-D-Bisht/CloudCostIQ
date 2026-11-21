@@ -65,7 +65,20 @@ export interface RecommendationResponse {
 
 export interface AdvisorChatResponse {
   reply: string;
-  provider: "groq" | "deterministic";
+  provider: "groq" | "unavailable";
+  conversation_id: string;
+  tools_used: string[];
+}
+
+export interface AdvisorChatHistoryMessage {
+  role: "user" | "assistant";
+  content: string;
+  tools_used: string[];
+}
+
+export interface AdvisorChatHistoryResponse {
+  conversation_id: string | null;
+  messages: AdvisorChatHistoryMessage[];
 }
 
 export interface RecommendationRequest {
@@ -75,6 +88,7 @@ export interface RecommendationRequest {
   pricing_model: PricingModel;
   region: RegionKey;
   workload: number;
+  hours_per_month: number;
 }
 
 export interface TerraformRequest {

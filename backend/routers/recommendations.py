@@ -1,14 +1,19 @@
 import json
+import logging
 import os
 from datetime import datetime, timezone
+from uuid import uuid4
 from typing import Any
 
 import httpx
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends, HTTPException
 
+from lib import auth as auth_lib
+from lib.agent import run_tool_agent
 from lib.advisor import rule_recommendations
 from lib.db import db
 from models.cloudcost import (
+    AdvisorChatHistoryResponse,
     AdvisorChatRequest,
     AdvisorChatResponse,
     Recommendation,
@@ -17,8 +22,10 @@ from models.cloudcost import (
 )
 
 router = APIRouter(prefix="/recommendations", tags=["recommendations"])
+logger = logging.getLogger(__name__)
 
 RECOMMENDATION_PROMPT = """You are a cloud cost analyst. Analyze only the supplied simulation; do not invent cloud metrics, prices, or savings. Return JSON only: {"recommendations":[...]}. Return 3-5 prioritized items, each with title, rationale, situation (what the supplied data shows), benefits (array of concrete benefits), tradeoffs (array of risks/downsides), estimated_monthly_saving (number; use 0 when unknown), priority (low|medium|high), and action (specific next step). Clearly label savings as estimates. Never claim resources were changed. If no issue is supported by the data, say so and recommend monitoring instead."""
+
 
 
 def deterministic(request: RecommendationRequest) -> list[Recommendation]:
@@ -49,6 +56,7 @@ def _context(request: RecommendationRequest) -> dict[str, Any]:
         "region": request.region,
         "pricing_model": request.pricing_model,
         "workload": request.workload,
+        "hours_per_month": request.hours_per_month,
     }
 
 
@@ -74,6 +82,7 @@ async def generate_recommendations(request: RecommendationRequest) -> tuple[str,
     try:
         return "gemini", await call_gemini(request)
     except Exception:
+        logger.exception("Gemini recommendations failed; using deterministic advisor")
         return "deterministic", deterministic(request)
 
 
@@ -88,38 +97,123 @@ async def get_recommendations(input: RecommendationRequest) -> RecommendationRes
             "created_at": datetime.now(timezone.utc),
         })
     except Exception:
-        pass
+        logger.exception("Could not persist recommendation record")
     return response
 
 
+
+def _history_messages(document: dict[str, Any]) -> list[dict[str, Any]]:
+    messages = []
+    for item in document.get("messages", [])[-40:]:
+        role = item.get("role")
+        content = item.get("content")
+        if role in {"user", "assistant"} and isinstance(content, str):
+            messages.append({
+                "role": role,
+                "content": content,
+                **({"tools_used": item["tools_used"]} if item.get("tools_used") else {}),
+            })
+    return messages
+
+
+@router.get("/chat/latest", response_model=AdvisorChatHistoryResponse)
+async def latest_advisor_chat(user=Depends(auth_lib.get_current_user)) -> AdvisorChatHistoryResponse:
+    document = await db.advisor_conversations.find_one(
+        {"user_id": user["_id"]},
+        sort=[("updated_at", -1)],
+    )
+    if not document:
+        return AdvisorChatHistoryResponse(conversation_id=None, messages=[])
+    return AdvisorChatHistoryResponse(
+        conversation_id=document["_id"],
+        messages=_history_messages(document),
+    )
+
+
 @router.post("/chat", response_model=AdvisorChatResponse)
-async def advisor_chat(input: AdvisorChatRequest) -> AdvisorChatResponse:
+async def advisor_chat(
+    input: AdvisorChatRequest,
+    user=Depends(auth_lib.get_current_user),
+) -> AdvisorChatResponse:
+    if not input.messages or input.messages[-1].role != "user":
+        raise HTTPException(status_code=422, detail="The last chat message must be from the user.")
+
+    now = datetime.now(timezone.utc)
+    if input.conversation_id:
+        conversation = await db.advisor_conversations.find_one(
+            {"_id": input.conversation_id, "user_id": user["_id"]}
+        )
+        if not conversation:
+            raise HTTPException(status_code=404, detail="Conversation not found.")
+        conversation_id = input.conversation_id
+        history = [
+            {"role": item["role"], "content": item["content"]}
+            for item in conversation.get("messages", [])[-20:]
+            if item.get("role") in {"user", "assistant"} and isinstance(item.get("content"), str)
+        ]
+    else:
+        conversation_id = str(uuid4())
+        history = []
+        try:
+            await db.advisor_conversations.insert_one({
+                "_id": conversation_id,
+                "user_id": user["_id"],
+                "messages": [],
+                "created_at": now,
+                "updated_at": now,
+            })
+        except Exception as exc:
+            logger.exception("Could not create advisor conversation")
+            raise HTTPException(status_code=503, detail="Chat history is temporarily unavailable.") from exc
+
+    user_message = input.messages[-1].content
+    history_with_current = [*history, {"role": "user", "content": user_message}]
+    tools_used: list[str] = []
+    provider = "groq"
+
     api_key = os.environ.get("GROQ_API_KEY")
     if api_key:
-        system = (
-            "You are CloudCost IQ, a real conversational cloud cost analyst. Answer the latest message directly, "
-            "using only this simulated workspace context. Explain what is happening, concrete next steps, and pros/cons "
-            "when relevant. Distinguish estimates from actual bills. Never invent data or claim to change infrastructure. "
-            "If asked about something absent from context, say what is missing.\nWorkspace context: "
-            + json.dumps(_context(input))
-        )
-        messages = [{"role": "system", "content": system}]
-        messages.extend({"role": message.role, "content": message.content} for message in input.messages[-12:])
         try:
-            async with httpx.AsyncClient(timeout=httpx.Timeout(connect=3, read=30, write=5, pool=2), trust_env=False) as client:
-                response = await client.post(
-                    os.environ.get("GROQ_BASE_URL", "https://api.groq.com/openai/v1").rstrip("/") + "/chat/completions",
-                    headers={"Authorization": f"Bearer {api_key}"},
-                    json={"model": os.environ.get("GROQ_MODEL", "openai/gpt-oss-20b"), "temperature": 0.3, "messages": messages},
-                )
-                response.raise_for_status()
-                reply = str(response.json()["choices"][0]["message"]["content"]).strip()
-                if reply:
-                    return AdvisorChatResponse(reply=reply, provider="groq")
+            reply, tools_used = await run_tool_agent(input, history_with_current, _context(input))
         except Exception:
-            pass
+            logger.exception("Groq tool agent failed")
+            reply = (
+                "The live AI agent is temporarily unavailable. Your scenario is unchanged. "
+                "You can still use the Simulation, Insights, and Terraform panels while the agent is unavailable."
+            )
+            provider = "unavailable"
+    else:
+        reply = (
+            "The live AI agent is not configured because GROQ_API_KEY is missing. "
+            "Your scenario is unchanged. You can still use the Simulation, Insights, and Terraform panels."
+        )
+        provider = "unavailable"
+
+    stored_messages = [
+        {"role": "user", "content": user_message, "created_at": now},
+        {
+            "role": "assistant",
+            "content": reply[:4000],
+            "tools_used": tools_used,
+            "provider": provider,
+            "created_at": datetime.now(timezone.utc),
+        },
+    ]
+    try:
+        await db.advisor_conversations.update_one(
+            {"_id": conversation_id, "user_id": user["_id"]},
+            {
+                "$push": {"messages": {"$each": stored_messages, "$slice": -40}},
+                "$set": {"updated_at": datetime.now(timezone.utc)},
+            },
+        )
+    except Exception as exc:
+        logger.exception("Could not persist advisor conversation")
+        raise HTTPException(status_code=503, detail="Chat history could not be saved. Please retry.") from exc
 
     return AdvisorChatResponse(
-        reply="The live chat model is not configured or is temporarily unavailable. Set GROQ_API_KEY in backend/.env and restart the backend to enable conversational answers. You can still run the deterministic recommendations for this simulation.",
-        provider="deterministic",
+        reply=reply[:4000],
+        provider=provider,
+        conversation_id=conversation_id,
+        tools_used=tools_used,
     )
